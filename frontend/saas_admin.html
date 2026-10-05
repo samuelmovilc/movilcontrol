@@ -184,8 +184,9 @@ function renderTable() {
         <td>${end}</td>
         <td style="font-size:11px; max-width: 150px;">${mods}</td>
         <td>${status}</td>
-        <td>
+        <td style="display: flex; gap: 5px;">
           <button class="btn btn-primary" style="padding: 5px 8px; font-size:11px" onclick='editTenant(${JSON.stringify(t).replace(/'/g, "&apos;")})'><i class="fa-solid fa-pen"></i> Editar</button>
+          <button class="btn ${t.is_active ? 'btn-danger' : 'btn-success'}" style="padding: 5px 8px; font-size:11px" onclick="toggleStatus(${t.id}, ${t.is_active})"><i class="fa-solid fa-power-off"></i> ${t.is_active ? 'Desactivar' : 'Activar'}</button>
         </td>
       </tr>
     `;
@@ -235,6 +236,26 @@ function editTenant(t) {
   ['pos','productos','clientes','cartera','finanzas','config'].forEach(m => {
     document.getElementById('m-'+m).checked = mods[m] !== false; // Si no existe, por defecto true
   });
+}
+
+async function toggleStatus(id, currentStatus) {
+  if (!confirm(`¿Estás seguro de ${currentStatus ? 'desactivar' : 'activar'} este cliente?`)) return;
+  const t = tenants.find(x => x.id === id);
+  if (!t) return;
+  
+  const payload = {
+    ...t,
+    is_active: currentStatus ? 0 : 1,
+    start_date: t.start_date ? t.start_date.split('T')[0] : null,
+    end_date: t.end_date ? t.end_date.split('T')[0] : null
+  };
+  
+  try {
+    await fetchAPI('/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    loadTenants();
+  } catch(e) {
+    alert('Error al cambiar el estado: ' + e.message);
+  }
 }
 
 async function saveTenant() {
