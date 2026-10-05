@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ventanas y Estilo POS</title>
+<title>ControlMovil POS</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
@@ -464,7 +464,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 </div>
 
 <header class="app-header">
-  <div class="app-logo"><i class="fa-solid fa-store"></i> Ventanas y Estilo</div>
+  <div class="app-logo"><i class="fa-solid fa-store"></i> ControlMovil</div>
   <nav class="app-tabs">
     <button class="tab-btn active" onclick="showModule('pos')" id="tab-pos"><i class="fa-solid fa-cash-register"></i> POS</button>
     <button class="tab-btn" onclick="showModule('caja')" id="tab-caja"><i class="fa-solid fa-coins"></i> Caja</button>
@@ -1121,7 +1121,7 @@ async function apiDelete(url){
 
 /* ═══ STATE ═══ */
 var productosCache=[];
-var configCache={nombreNegocio:'Ventanas y Estilo',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm'};
+var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm'};
 var configId=1;
 var cart=[];
 var currentSaleForReprint=null;
@@ -1577,7 +1577,7 @@ async function processSale(){
 
 function printTicket(venta){
   var cfg=configCache;
-  var nombre=cfg.nombre_negocio||cfg.nombreNegocio||'Ventanas y Estilo';
+  var nombre=cfg.nombre_negocio||cfg.nombreNegocio||'ControlMovil';
   var dir=cfg.direccion||'';
   var tel=cfg.telefono||'';
   var msg=cfg.mensaje_tirilla||cfg.mensajeTirilla||'¡Gracias por su compra!';
@@ -1973,7 +1973,7 @@ function exportarResumenMetodos(){
   var dateTo=document.getElementById('caja-date-to').value;
   if(!dateTo)dateTo=dateFrom;
   var cfg=configCache;
-  var nombre=cfg.nombre_negocio||cfg.nombreNegocio||'Ventanas y Estilo';
+  var nombre=cfg.nombre_negocio||cfg.nombreNegocio||'ControlMovil';
   var dir=cfg.direccion||'';
   var tel=cfg.telefono||'';
   var msg=cfg.mensaje_tirilla||cfg.mensajeTirilla||'';
@@ -2412,7 +2412,7 @@ async function generateCatalogPDF(withPrice){
       }
     }
 
-    doc.save('Catalogo_'+(configCache.nombre_negocio||'Ventanas_y_Estilo').replace(/ /g,'_')+'.pdf');
+    doc.save('Catalogo_'+(configCache.nombre_negocio||'ControlMovil').replace(/ /g,'_')+'.pdf');
     toast('Catálogo PDF generado','success',3000);
   } catch(e) {
     toast('Error generando PDF: ' + e.message, 'error');
