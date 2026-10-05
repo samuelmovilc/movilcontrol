@@ -59,18 +59,15 @@
     <h3 style="color:var(--electric-dark); margin-bottom: 15px;"><i class="fa-solid fa-building"></i> <span id="form-title">Crear Nuevo Cliente</span></h3>
     <input type="hidden" id="t-id">
     
-    <div class="form-grid">
+    <div style="display:flex; flex-direction:column; gap:15px; margin-bottom:15px;">
       <div class="form-group"><label>Nombre del Negocio</label><input type="text" id="t-business" placeholder="Ej: Tienda Maria"></div>
-      <div class="form-group"><label>Usuario para Login</label><input type="text" id="t-user" placeholder="Ej: maria123"></div>
+      <div class="form-group"><label>Usuario para Login</label><input type="text" id="t-user" placeholder="Ej: maria123" onkeyup="if(!document.getElementById('t-id').value) document.getElementById('t-db').value = 'tenancy_' + this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')"></div>
       <div class="form-group"><label>Contraseña</label><input type="text" id="t-pass" placeholder="Clave del cliente"></div>
-      <div class="form-group"><label>Nombre de Base de Datos (Único)</label><input type="text" id="t-db" placeholder="Ej: tenancy_tiendamaria" onkeyup="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')"></div>
-    </div>
-    
-    <div class="form-grid">
+      <div class="form-group"><label>Nombre de Base de Datos (Automático)</label><input type="text" id="t-db" placeholder="Se genera solo" readonly style="background:#f3f4f6; color:#6b7280; cursor:not-allowed;"></div>
       <div class="form-group"><label>Correo (Opcional)</label><input type="email" id="t-email"></div>
       <div class="form-group"><label>Teléfono (Opcional)</label><input type="text" id="t-phone"></div>
       <div class="form-group"><label>Fecha Inicio Licencia</label><input type="date" id="t-start"></div>
-      <div class="form-group"><label>Fecha Fin Licencia</label><input type="date" id="t-end"></div>
+      <div class="form-group"><label>Fecha Fin Licencia (Opcional)</label><input type="date" id="t-end"></div>
     </div>
 
     <div class="form-group" style="margin-bottom: 15px;">
@@ -201,7 +198,6 @@ function showForm() {
   document.getElementById('t-user').value = '';
   document.getElementById('t-pass').value = '';
   document.getElementById('t-db').value = 'tenancy_';
-  document.getElementById('t-db').disabled = false; // Solo editable en creación
   document.getElementById('t-email').value = '';
   document.getElementById('t-phone').value = '';
   document.getElementById('t-start').value = new Date().toISOString().split('T')[0];
@@ -224,7 +220,6 @@ function editTenant(t) {
   document.getElementById('t-user').value = t.username;
   document.getElementById('t-pass').value = t.password;
   document.getElementById('t-db').value = t.db_name;
-  document.getElementById('t-db').disabled = true; // No permitir cambiar la BD una vez creada
   document.getElementById('t-email').value = t.email || '';
   document.getElementById('t-phone').value = t.phone || '';
   document.getElementById('t-start').value = t.start_date ? t.start_date.split('T')[0] : '';
