@@ -182,7 +182,7 @@ function renderTable() {
         <td style="font-size:11px; max-width: 150px;">${mods}</td>
         <td>${status}</td>
         <td style="display: flex; gap: 5px;">
-          <button class="btn" style="padding: 5px 8px; font-size:11px; background:#25D366; color:#fff; border:none;" onclick="copyWpp('${t.username}')" title="Copiar Bienvenida Wpp"><i class="fa-brands fa-whatsapp"></i> Wpp</button>
+          <button class="btn" style="padding: 5px 8px; font-size:11px; background:#25D366; color:#fff; border:none;" onclick="copyWpp('${t.username}', '${t.password}')" title="Copiar Bienvenida Wpp"><i class="fa-brands fa-whatsapp"></i> Wpp</button>
           <button class="btn btn-primary" style="padding: 5px 8px; font-size:11px" onclick='editTenant(${JSON.stringify(t).replace(/'/g, "&apos;")})'><i class="fa-solid fa-pen"></i> Editar</button>
           <button class="btn ${t.is_active ? 'btn-danger' : 'btn-success'}" style="padding: 5px 8px; font-size:11px" onclick="toggleStatus(${t.id}, ${t.is_active})"><i class="fa-solid fa-power-off"></i> ${t.is_active ? 'Desactivar' : 'Activar'}</button>
         </td>
@@ -307,9 +307,9 @@ async function saveTenant() {
   btn.disabled = false;
 }
 
-function copyWpp(username) {
+function copyWpp(username, password) {
   const url = window.location.origin;
-  const msg = `*Gracias por confiar*,\nAquí tienes tu programa instalado, tu software propio en un servidor privado listo para usar.\n\n🌐 URL de acceso: ${url}\n👤 Usuario: ${username}\n🔑 Contraseña: admin123\n\n¡Éxitos!`;
+  const msg = `*Gracias por confiar*,\nAquí tienes tu programa instalado, tu software propio en un servidor privado listo para usar.\n\n🌐 URL de acceso: ${url}\n👤 Usuario: ${username}\n🔑 Contraseña: ${password}\n\n¡Éxitos!`;
   navigator.clipboard.writeText(msg).then(() => {
     alert('✅ Mensaje copiado al portapapeles. Listo para pegar en WhatsApp.');
   }).catch(err => {
