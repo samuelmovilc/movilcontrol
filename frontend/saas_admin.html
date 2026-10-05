@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SaaS Master Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --electric: #0284c7; --electric-dark: #0369a1; --electric-pale: #e0f2fe;
+    --bg: #F0F4FF; --surface: #FFFFFF; --surface2: #F7F9FF;
+    --border: #C5D5FF; --text: #0A1628; --text-light: #7090BB;
+    --green: #00B86B; --red: #E53935; --radius: 8px;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); padding: 20px; font-size: 13px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .header h1 { color: var(--electric); display: flex; align-items: center; gap: 10px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+  .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; color: #fff; }
+  .btn-primary { background: var(--electric); }
+  .btn-primary:hover { background: var(--electric-dark); }
+  .btn-success { background: var(--green); }
+  .btn-danger { background: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+  th { background: var(--electric-pale); color: var(--electric-dark); }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  input, select, textarea { padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+  .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .modules-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: var(--surface2); padding: 10px; border-radius: 4px; border: 1px solid var(--border); }
+  .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; }
+  .badge.active { background: var(--green); }
+  .badge.inactive { background: var(--red); }
+  #auth-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  #auth-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; width: 300px; border: 1px solid var(--border); }
+  #auth-box input { width: 100%; margin: 15px 0; }
+</style>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <div id="auth-box">
+    <h2 style="color:var(--electric)"><i class="fa-solid fa-lock"></i> Admin SaaS</h2>
+    <input type="password" id="admin-pass" placeholder="Clave Maestra">
+    <button class="btn btn-primary" style="width:100%; justify-content:center" onclick="loginAdmin()">Ingresar</button>
+  </div>
+</div>
+
+<div class="header" id="main-header" style="display:none">
+  <h1><i class="fa-solid fa-server"></i> Panel de Control SaaS (Multi-Tenant)</h1>
+  <button class="btn btn-danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
+</div>
+
+<div id="app-content" style="display:none">
+  <div class="card" id="form-card" style="display:none">
+    <h3 style="color:var(--electric-dark); margin-bottom: 15px;"><i class="fa-solid fa-building"></i> <span id="form-title">Crear Nuevo Cliente</span></h3>
+    <input type="hidden" id="t-id">
+    
+    <div class="form-grid">
+      <div class="form-group"><label>Nombre del Negocio</label><input type="text" id="t-business" placeholder="Ej: Tienda Maria"></div>
+      <div class="form-group"><label>Usuario para Login</label><input type="text" id="t-user" placeholder="Ej: maria123"></div>
+      <div class="form-group"><label>Contraseña</label><input type="text" id="t-pass" placeholder="Clave del cliente"></div>
+      <div class="form-group"><label>Nombre de Base de Datos (Único)</label><input type="text" id="t-db" placeholder="Ej: tenancy_tiendamaria" onkeyup="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')"></div>
+    </div>
+    
+    <div class="form-grid">
+      <div class="form-group"><label>Correo (Opcional)</label><input type="email" id="t-email"></div>
+      <div class="form-group"><label>Teléfono (Opcional)</label><input type="text" id="t-phone"></div>
+      <div class="form-group"><label>Fecha Inicio Licencia</label><input type="date" id="t-start"></div>
+      <div class="form-group"><label>Fecha Fin Licencia</label><input type="date" id="t-end"></div>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 15px;">
+      <label>Observaciones</label>
+      <textarea id="t-obs" rows="2"></textarea>
+    </div>
+
+    <h4 style="margin-bottom:10px; color:var(--text-light)">Módulos Habilitados</h4>
+    <div class="modules-grid">
+      <label class="checkbox-group"><input type="checkbox" id="m-pos" checked> POS (Ventas)</label>
+      <label class="checkbox-group"><input type="checkbox" id="m-productos" checked> Inventario / Productos</label>
+      <label class="checkbox-group"><input type="checkbox" id="m-clientes" checked> Clientes</label>
+      <label class="checkbox-group"><input type="checkbox" id="m-cartera" checked> Cartera / Créditos</label>
+      <label class="checkbox-group"><input type="checkbox" id="m-finanzas" checked> Finanzas / Informes</label>
+      <label class="checkbox-group"><input type="checkbox" id="m-config" checked> Configuración</label>
+    </div>
+
+    <div style="margin-top: 15px; display:flex; align-items:center; gap: 20px;">
+      <label class="checkbox-group" style="font-size: 14px; font-weight: bold;"><input type="checkbox" id="t-active" checked> Cliente Activo (Si se desmarca, no podrá ingresar)</label>
+    </div>
+
+    <div style="margin-top: 20px; display:flex; gap: 10px;">
+      <button class="btn btn-success" onclick="saveTenant()"><i class="fa-solid fa-save"></i> Guardar Cliente</button>
+      <button class="btn btn-danger" onclick="hideForm()">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center">
+      <h3>Clientes Registrados</h3>
+      <button class="btn btn-primary" onclick="showForm()"><i class="fa-solid fa-plus"></i> Nuevo Cliente</button>
+    </div>
+    
+    <div style="overflow-x: auto;">
+      <table id="tenants-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Negocio</th>
+            <th>Usuario</th>
+            <th>Base de Datos</th>
+            <th>Licencia</th>
+            <th>Módulos</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let token = localStorage.getItem('saas_admin_token') || '';
+let tenants = [];
+
+if (token) {
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('main-header').style.display = 'flex';
+  document.getElementById('app-content').style.display = 'block';
+  loadTenants();
+}
+
+function loginAdmin() {
+  const p = document.getElementById('admin-pass').value;
+  if(p) {
+    token = p;
+    localStorage.setItem('saas_admin_token', token);
+    location.reload();
+  }
+}
+
+function logout() {
+  localStorage.removeItem('saas_admin_token');
+  location.reload();
+}
+
+async function fetchAPI(url, options = {}) {
+  options.headers = { ...options.headers, 'Content-Type': 'application/json', 'x-admin-token': token };
+  const res = await fetch('/api/saas/tenants' + url, options);
+  if (res.status === 403) {
+    alert('Clave incorrecta o expirada');
+    logout();
+  }
+  return res.json();
+}
+
+async function loadTenants() {
+  try {
+    tenants = await fetchAPI('');
+    renderTable();
+  } catch(e) { console.error(e); }
+}
+
+function renderTable() {
+  const tbody = document.querySelector('#tenants-table tbody');
+  tbody.innerHTML = '';
+  tenants.forEach(t => {
+    let mods = Object.entries(t.modules || {}).filter(m => m[1]).map(m => m[0]).join(', ');
+    let status = t.is_active ? '<span class="badge active">Activo</span>' : '<span class="badge inactive">Inactivo</span>';
+    let end = t.end_date ? new Date(t.end_date).toLocaleDateString() : 'Ilimitada';
+    if (t.end_date && new Date(t.end_date) < new Date()) status = '<span class="badge inactive">Expirada</span>';
+    
+    tbody.innerHTML += \`
+      <tr>
+        <td>\${t.id}</td>
+        <td style="font-weight:bold">\${t.business_name}</td>
+        <td>\${t.username}</td>
+        <td style="color:var(--electric)">\${t.db_name}</td>
+        <td>\${end}</td>
+        <td style="font-size:11px; max-width: 150px;">\${mods}</td>
+        <td>\${status}</td>
+        <td>
+          <button class="btn btn-primary" style="padding: 5px 8px; font-size:11px" onclick='editTenant(\${JSON.stringify(t).replace(/'/g, "&apos;")})'><i class="fa-solid fa-pen"></i> Editar</button>
+        </td>
+      </tr>
+    \`;
+  });
+}
+
+function showForm() {
+  document.getElementById('form-card').style.display = 'block';
+  document.getElementById('form-title').innerText = 'Crear Nuevo Cliente';
+  document.getElementById('t-id').value = '';
+  document.getElementById('t-business').value = '';
+  document.getElementById('t-user').value = '';
+  document.getElementById('t-pass').value = '';
+  document.getElementById('t-db').value = 'tenancy_';
+  document.getElementById('t-db').disabled = false; // Solo editable en creación
+  document.getElementById('t-email').value = '';
+  document.getElementById('t-phone').value = '';
+  document.getElementById('t-start').value = new Date().toISOString().split('T')[0];
+  document.getElementById('t-end').value = '';
+  document.getElementById('t-obs').value = '';
+  document.getElementById('t-active').checked = true;
+  ['pos','productos','clientes','cartera','finanzas','config'].forEach(m => document.getElementById('m-'+m).checked = true);
+  window.scrollTo(0,0);
+}
+
+function hideForm() {
+  document.getElementById('form-card').style.display = 'none';
+}
+
+function editTenant(t) {
+  showForm();
+  document.getElementById('form-title').innerText = 'Editar Cliente: ' + t.business_name;
+  document.getElementById('t-id').value = t.id;
+  document.getElementById('t-business').value = t.business_name;
+  document.getElementById('t-user').value = t.username;
+  document.getElementById('t-pass').value = t.password;
+  document.getElementById('t-db').value = t.db_name;
+  document.getElementById('t-db').disabled = true; // No permitir cambiar la BD una vez creada
+  document.getElementById('t-email').value = t.email || '';
+  document.getElementById('t-phone').value = t.phone || '';
+  document.getElementById('t-start').value = t.start_date ? t.start_date.split('T')[0] : '';
+  document.getElementById('t-end').value = t.end_date ? t.end_date.split('T')[0] : '';
+  document.getElementById('t-obs').value = t.observations || '';
+  document.getElementById('t-active').checked = t.is_active === 1;
+  
+  const mods = t.modules || {};
+  ['pos','productos','clientes','cartera','finanzas','config'].forEach(m => {
+    document.getElementById('m-'+m).checked = mods[m] !== false; // Si no existe, por defecto true
+  });
+}
+
+async function saveTenant() {
+  const btn = document.querySelector('.btn-success');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+  btn.disabled = true;
+
+  const id = document.getElementById('t-id').value;
+  const data = {
+    business_name: document.getElementById('t-business').value,
+    username: document.getElementById('t-user').value,
+    password: document.getElementById('t-pass').value,
+    db_name: document.getElementById('t-db').value,
+    email: document.getElementById('t-email').value,
+    phone: document.getElementById('t-phone').value,
+    start_date: document.getElementById('t-start').value || null,
+    end_date: document.getElementById('t-end').value || null,
+    observations: document.getElementById('t-obs').value,
+    is_active: document.getElementById('t-active').checked ? 1 : 0,
+    modules: {
+      pos: document.getElementById('m-pos').checked,
+      productos: document.getElementById('m-productos').checked,
+      clientes: document.getElementById('m-clientes').checked,
+      cartera: document.getElementById('m-cartera').checked,
+      finanzas: document.getElementById('m-finanzas').checked,
+      config: document.getElementById('m-config').checked
+    }
+  };
+
+  if(!data.business_name || !data.username || !data.password || !data.db_name) {
+    alert('Faltan campos obligatorios');
+    btn.innerHTML = '<i class="fa-solid fa-save"></i> Guardar Cliente'; btn.disabled = false;
+    return;
+  }
+
+  try {
+    if(id) {
+      // Update
+      await fetchAPI('/' + id, { method: 'PUT', body: JSON.stringify(data) });
+      alert('Cliente actualizado correctamente');
+    } else {
+      // Create
+      const res = await fetchAPI('', { method: 'POST', body: JSON.stringify(data) });
+      if(res.error) { alert('Error: ' + res.error); } else { alert('Cliente creado y Base de Datos configurada correctamente'); }
+    }
+    hideForm();
+    loadTenants();
+  } catch(e) {
+    alert('Error de red: ' + e.message);
+  }
+  
+  btn.innerHTML = '<i class="fa-solid fa-save"></i> Guardar Cliente';
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>
