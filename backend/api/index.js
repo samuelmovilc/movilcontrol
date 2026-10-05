@@ -78,7 +78,7 @@ app.post('/api/login', async (req, res) => {
     if (!username || !password) return res.status(400).json({ error: 'Faltan credenciales' });
 
     const [rows] = await masterPool.query('SELECT * FROM tenants WHERE username = ? AND is_active = 1', [username]);
-    if (rows.length === 0) return res.status(401).json({ error: 'Usuario no existe o está inactivo' });
+    if (rows.length === 0) return res.status(401).json({ error: 'Hola Empresario Exitoso. Contáctame para Verificar Tu Base de Datos. Att: Samuel M, Asesor De Confianza MovilControl. +573195122754 este es el número para que me contacten por WhatsApp.' });
     
     const tenant = rows[0];
     if (password !== tenant.password) return res.status(401).json({ error: 'Contraseña incorrecta' });
