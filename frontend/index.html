@@ -2872,7 +2872,13 @@ async function abrirCotizadorCredito() {
   document.getElementById('cotizador-search-prod').value = '';
   document.getElementById('cotizador-barcode').value = '';
   document.getElementById('cotizador-search-results').style.display = 'none';
-  cotizadorProductos = [];
+  cotizadorProductos = cart.map(item => ({
+    id: item.codigo,
+    nombre: item.nombre,
+    precio: item.precioUnitario,
+    cantidad: item.cantidad,
+    stock: 999
+  }));
   renderCotizadorProductos();
   
   document.getElementById('credito-recargo-porcentaje').value = '15';
