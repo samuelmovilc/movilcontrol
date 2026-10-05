@@ -175,20 +175,20 @@ function renderTable() {
     let end = t.end_date ? new Date(t.end_date).toLocaleDateString() : 'Ilimitada';
     if (t.end_date && new Date(t.end_date) < new Date()) status = '<span class="badge inactive">Expirada</span>';
     
-    tbody.innerHTML += \`
+    tbody.innerHTML += `
       <tr>
-        <td>\${t.id}</td>
-        <td style="font-weight:bold">\${t.business_name}</td>
-        <td>\${t.username}</td>
-        <td style="color:var(--electric)">\${t.db_name}</td>
-        <td>\${end}</td>
-        <td style="font-size:11px; max-width: 150px;">\${mods}</td>
-        <td>\${status}</td>
+        <td>${t.id}</td>
+        <td style="font-weight:bold">${t.business_name}</td>
+        <td>${t.username}</td>
+        <td style="color:var(--electric)">${t.db_name}</td>
+        <td>${end}</td>
+        <td style="font-size:11px; max-width: 150px;">${mods}</td>
+        <td>${status}</td>
         <td>
-          <button class="btn btn-primary" style="padding: 5px 8px; font-size:11px" onclick='editTenant(\${JSON.stringify(t).replace(/'/g, "&apos;")})'><i class="fa-solid fa-pen"></i> Editar</button>
+          <button class="btn btn-primary" style="padding: 5px 8px; font-size:11px" onclick='editTenant(${JSON.stringify(t).replace(/'/g, "&apos;")})'><i class="fa-solid fa-pen"></i> Editar</button>
         </td>
       </tr>
-    \`;
+    `;
   });
 }
 

@@ -14,7 +14,7 @@ const masterPool = mysql.createPool({
   port:            parseInt(process.env.DB_PORT) || 3308,
   database:        'saas_master',
   user:            process.env.DB_USER     || 'pos_user',
-  password:        process.env.DB_PASSWORD || 'Pap3l3r!4#S3cur3_2026',
+  password:        process.env.DB_PASSWORD,
   waitForConnections: true,
   connectionLimit: 10,
   charset:         'utf8mb4'
@@ -30,7 +30,7 @@ function getTenantPool(dbName) {
       port:            parseInt(process.env.DB_PORT) || 3308,
       database:        dbName,
       user:            process.env.DB_USER     || 'pos_user',
-      password:        process.env.DB_PASSWORD || 'Pap3l3r!4#S3cur3_2026',
+      password:        process.env.DB_PASSWORD,
       waitForConnections: true,
       connectionLimit: 10,
       charset:         'utf8mb4'
@@ -39,8 +39,8 @@ function getTenantPool(dbName) {
   }
   return tenantPools.get(dbName);
 }
-
-const JWT_SECRET = process.env.JWT_SECRET || 'CaribePOS_Super_Secret_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) console.warn('ATENCIÓN: JWT_SECRET no está configurado en las variables de entorno');
 
 // ── MIDDLEWARE SAAS ──
 const tenantAuth = async (req, res, next) => {
@@ -798,7 +798,9 @@ app.get('/api/catalogos/:slug', async (req, res) => {
 // ════════════════════════════════
 const saasAdminAuth = (req, res, next) => {
   const token = req.headers['x-admin-token'];
-  if (token !== 'CaribeAdminSaaS2026!') return res.status(403).json({ error: 'No autorizado' });
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (!adminToken) return res.status(500).json({ error: 'Servidor no configurado' });
+  if (token !== adminToken) return res.status(403).json({ error: 'No autorizado' });
   next();
 };
 
@@ -828,7 +830,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
       port:            parseInt(process.env.DB_PORT) || 3308,
       database:        db_name,
       user:            process.env.DB_USER     || 'pos_user',
-      password:        process.env.DB_PASSWORD || 'Pap3l3r!4#S3cur3_2026',
+      password:        process.env.DB_PASSWORD,
       waitForConnections: true,
       connectionLimit: 5
     });
