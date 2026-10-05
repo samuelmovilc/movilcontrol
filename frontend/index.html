@@ -1337,7 +1337,8 @@ function calcChange(){
 }
 function initPayRows(){document.getElementById('multi-pay-list').innerHTML='';addPayRow()}
 function addPayRow(){
-  var mp=configCache.metodos_pago||['Efectivo','Tarjeta débito','Transferencia'];
+  var mp = Array.isArray(configCache.metodos_pago) ? [...configCache.metodos_pago] : ['Efectivo','Tarjeta débito','Transferencia'];
+  if(!mp.some(m => m.toLowerCase().includes('credito') || m.toLowerCase().includes('crédito'))) mp.push('Crédito');
   var list=document.getElementById('multi-pay-list');
   var row=document.createElement('div');row.className='multi-pay-row';
   var opts=mp.map(function(m){return'<option>'+m+'</option>'}).join('');
@@ -1494,7 +1495,7 @@ async function processSale(){
   var paga=parseFloat(document.getElementById('paga-con').value)||payRows.reduce(function(s,r){return s+r.monto},0);
   if(paga < total - 0.01){toast('Monto insuficiente. Faltan '+fmt(total-paga),'error');return}
   
-  var isCredito = payRows.some(function(r){return String(r.metodo).toLowerCase().includes('crédito')});
+  var isCredito = payRows.some(function(r){var m=String(r.metodo).toLowerCase(); return m.includes('crédito') || m.includes('credito');});
   
   if(isCredito){
      var clienteIdStr = document.getElementById('pos-cliente').value;
