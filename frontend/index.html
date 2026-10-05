@@ -1426,6 +1426,18 @@ async function cargarCotizacionAlPOS(planId) {
             subtotal: precioInflado * p.cantidad
           });
         });
+      } else {
+        // Fallback para cotizaciones creadas antes de la actualización o sin productos explícitos
+        var tc = parseFloat(plan.total_credito) || 0;
+        if(tc > 0) {
+          cart.push({
+            codigo: 'COT-' + plan.id,
+            nombre: 'Cotización de Crédito (Plan #' + plan.id + ')',
+            precioUnitario: tc,
+            cantidad: 1,
+            subtotal: tc
+          });
+        }
       }
       renderCart();
       
