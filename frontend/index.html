@@ -457,33 +457,6 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 </div>
 
 
-<!-- PIN SCREEN -->
-<div id="pin-screen" style="position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0A1628 0%,#0D2150 50%,#0A1628 100%);display:flex;flex-direction:column;align-items:center;justify-content:center">
-  <div style="text-align:center;margin-bottom:32px">
-    <i class="fa-solid fa-store" style="font-size:48px;color:#0066FF;margin-bottom:12px;display:block"></i>
-    <div style="font-size:24px;font-weight:800;color:#fff">Ventanas y Estilo POS</div>
-    <div style="font-size:13px;color:#7090BB;margin-top:4px">Ingresa tu PIN para continuar</div>
-  </div>
-  <div style="background:rgba(255,255,255,.05);border:1px solid rgba(0,102,255,.3);border-radius:16px;padding:32px 40px;text-align:center;min-width:300px">
-    <div id="pin-display" style="font-size:28px;color:#fff;letter-spacing:8px;min-height:54px;background:rgba(0,0,0,.3);border-radius:8px;padding:12px 20px;min-width:260px;text-align:center;margin-bottom:24px;line-height:normal"></div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
-      <button class="pin-btn" type="button" onclick="pinPress('1')">1</button>
-      <button class="pin-btn" type="button" onclick="pinPress('2')">2</button>
-      <button class="pin-btn" type="button" onclick="pinPress('3')">3</button>
-      <button class="pin-btn" type="button" onclick="pinPress('4')">4</button>
-      <button class="pin-btn" type="button" onclick="pinPress('5')">5</button>
-      <button class="pin-btn" type="button" onclick="pinPress('6')">6</button>
-      <button class="pin-btn" type="button" onclick="pinPress('7')">7</button>
-      <button class="pin-btn" type="button" onclick="pinPress('8')">8</button>
-      <button class="pin-btn" type="button" onclick="pinPress('9')">9</button>
-      <button class="pin-btn pin-btn-clear" type="button" onclick="pinClear()">⌫ Borrar</button>
-      <button class="pin-btn" type="button" onclick="pinPress('0')">0</button>
-      <button class="pin-btn pin-btn-enter" type="button" onclick="pinEnter()">✓</button>
-    </div>
-    <div id="pin-error" style="color:#E53935;font-size:12px;font-weight:700;min-height:18px;margin-top:8px"></div>
-  </div>
-</div>
-
 <!-- LOADING -->
 <div class="loading-overlay" id="loading">
   <div class="spinner"></div>
@@ -1043,42 +1016,6 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 
 <script>
 const API_BASE='/api';
-const APP_PIN='3195122754';
-
-/* ═══ PIN ═══ */
-var pinValue='';
-var pinActivo=true;
-
-function pinActualizar(){
-  var d=document.getElementById('pin-display');
-  if(!d)return;
-  d.textContent=pinValue.length===0?'':pinValue.replace(/./g,'● ').trim();
-}
-function pinPress(n){
-  if(!pinActivo||pinValue.length>=10)return;
-  pinValue+=n;
-  pinActualizar();
-  document.getElementById('pin-error').textContent='';
-  if(pinValue.length===APP_PIN.length)setTimeout(pinEnter,200);
-}
-function pinClear(){
-  if(!pinActivo)return;
-  pinValue=pinValue.slice(0,-1);
-  pinActualizar();
-  document.getElementById('pin-error').textContent='';
-}
-function pinEnter(){
-  if(!pinActivo)return;
-  if(pinValue===APP_PIN){
-    pinActivo=false;
-    var ps=document.getElementById('pin-screen'); if(ps) { ps.style.display='none'; }
-    ps.style.opacity='0';ps.style.transition='opacity 0.4s';
-    setTimeout(function(){ps.style.display='none';initApp();},400);
-  }else{
-    document.getElementById('pin-error').textContent='PIN incorrecto';
-    pinValue='';pinActualizar();
-  }
-}
 function salir() {
   if(confirm('¿Cerrar sesión?')) {
     saasLogout();
