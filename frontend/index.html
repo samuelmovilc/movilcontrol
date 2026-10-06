@@ -450,11 +450,11 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   #cartera-body tr { display: flex !important; flex-direction: column !important; background: #fff !important; border: 1px solid var(--border) !important; border-radius: 12px !important; margin-bottom: 15px !important; padding: 15px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
   #cartera-body td { display: flex !important; justify-content: space-between !important; align-items: center !important; border-bottom: 1px dashed var(--border) !important; padding: 8px 0 !important; font-size: 13px !important; white-space: normal !important; text-align: right !important; }
   #cartera-body td:last-child { border-bottom: none !important; justify-content: center !important; gap: 10px !important; padding-top: 15px !important; }
-  #cartera-body td:nth-child(1)::before { content: 'ID Crédito:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
+  #cartera-body td:nth-child(1)::before { content: 'ID Crï¿½dito:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #cartera-body td:nth-child(2)::before { content: 'Cliente:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #cartera-body td:nth-child(3)::before { content: 'Fecha Inicio:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #cartera-body td:nth-child(4)::before { content: 'Venta Asociada:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(5)::before { content: 'Total Crédito:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
+  #cartera-body td:nth-child(5)::before { content: 'Total Crï¿½dito:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #cartera-body td:nth-child(6)::before { content: 'Abonado:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #cartera-body td:nth-child(7)::before { content: 'Saldo Pendiente:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #cartera-body td:nth-child(8)::before { content: 'Estado:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
@@ -467,9 +467,9 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   #caja-body td:nth-child(2)::before { content: 'Folio:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #caja-body td:nth-child(3)::before { content: 'Hora:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #caja-body td:nth-child(4)::before { content: 'Cliente:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(5)::before { content: 'Ítems:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
+  #caja-body td:nth-child(5)::before { content: 'ï¿½tems:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #caja-body td:nth-child(6)::before { content: 'Total:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(7)::before { content: 'Método(s):'; font-weight: bold; color: var(--text-light); margin-right:10px; }
+  #caja-body td:nth-child(7)::before { content: 'Mï¿½todo(s):'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #caja-body td:nth-child(8)::before { content: 'Obs:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
   #caja-body td:nth-child(9)::before { content: 'Estado:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
 
@@ -2467,52 +2467,7 @@ async function generateCatalogPDF(withPrice){
 function getSelectedProducts(){return Array.from(document.querySelectorAll('.prod-chk:checked')).map(function(c){return c.value})}
 function printBarcodes(){
   var ids=getSelectedProducts();if(!ids.length){toast('Selecciona productos','error');return}
-  var prods=productosCache.filter(function(p){return ids.includes(p.id)});
-  var h='<html><head><title>CÃ³digos</title><style>body{margin:0;padding:6px;font-family:monospace}.bc{display:inline-block;margin:4px;text-align:center;border:1px solid #ddd;padding:4px;width:74mm;page-break-inside:avoid}svg{width:100%}p{margin:2px 0;font-size:10px}@media print{@page{size:80mm auto;margin:2mm}}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script><style>
-/* WOW MOBILE REDESIGN */
-@media(max-width:900px){
-  /* 1. POS SPLIT VIEW - TODO VISIBLE SIMULTANEAMENTE */
-  .pos-layout { display: flex !important; flex-direction: column !important; height: calc(100vh - 145px) !important; overflow: hidden !important; }
-  .pos-left { width: 100% !important; height: 40% !important; overflow-y: auto !important; border-bottom: 3px solid var(--electric) !important; padding-bottom: 10px !important; }
-  .pos-right { position: relative !important; top: auto !important; left: auto !important; width: 100% !important; height: 60% !important; transform: none !important; border-radius: 0 !important; box-shadow: none !important; display: flex !important; flex-direction: column !important; z-index: 1 !important; }
-  .pos-right .card { border-radius: 0 !important; border: none !important; height: 100% !important; }
-  #mobile-cart-fab { display: none !important; } 
-
-  /* 2. CARTERA CARDS - 100% AMIGABLE Y LEIBLE */
-  #cartera-body tr { display: flex !important; flex-direction: column !important; background: #fff !important; border: 1px solid var(--border) !important; border-radius: 12px !important; margin-bottom: 15px !important; padding: 15px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
-  #cartera-body td { display: flex !important; justify-content: space-between !important; align-items: center !important; border-bottom: 1px dashed var(--border) !important; padding: 8px 0 !important; font-size: 13px !important; white-space: normal !important; text-align: right !important; }
-  #cartera-body td:last-child { border-bottom: none !important; justify-content: center !important; gap: 10px !important; padding-top: 15px !important; }
-  #cartera-body td:nth-child(1)::before { content: 'ID Crédito:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(2)::before { content: 'Cliente:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(3)::before { content: 'Fecha Inicio:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(4)::before { content: 'Venta Asociada:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(5)::before { content: 'Total Crédito:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(6)::before { content: 'Abonado:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(7)::before { content: 'Saldo Pendiente:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(8)::before { content: 'Estado:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #cartera-body td:nth-child(9)::before { content: 'Acciones:'; display:none; }
-
-  /* 3. CAJA BODY CARDS */
-  #caja-body tr { display: flex !important; flex-direction: column !important; background: #fff !important; border: 1px solid var(--border) !important; border-radius: 12px !important; margin-bottom: 15px !important; padding: 15px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
-  #caja-body td { display: flex !important; justify-content: space-between !important; align-items: center !important; border-bottom: 1px dashed var(--border) !important; padding: 8px 0 !important; font-size: 13px !important; white-space: normal !important; text-align: right !important; }
-  #caja-body td:last-child { border-bottom: none !important; justify-content: center !important; gap: 10px !important; padding-top: 15px !important; }
-  #caja-body td:nth-child(2)::before { content: 'Folio:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(3)::before { content: 'Hora:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(4)::before { content: 'Cliente:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(5)::before { content: 'Ítems:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(6)::before { content: 'Total:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(7)::before { content: 'Método(s):'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(8)::before { content: 'Obs:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-  #caja-body td:nth-child(9)::before { content: 'Estado:'; font-weight: bold; color: var(--text-light); margin-right:10px; }
-
-  /* 4. ESCONDER CABECERAS ORIGINALES Y FORZAR BLOCK */
-  #cartera-body, #caja-body { display: block !important; }
-  .tbl-wrap table thead { display: none !important; } 
-  .btn { font-size: 13px !important; min-height: 40px; }
-  .cart-item { padding: 10px; }
-}
-</style>
-</head><body>';
+  var h='<html><head><title>Cï¿½digos</title><style>body{margin:0;padding:6px;font-family:monospace}.bc{display:inline-block;margin:4px;text-align:center;border:1px solid #ddd;padding:4px;width:74mm;page-break-inside:avoid}svg{width:100%}p{margin:2px 0;font-size:10px}@media print{@page{size:80mm auto;margin:2mm}}</style><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script></head><body>';
   prods.forEach(function(p){h+='<div class="bc"><svg id="bc'+p.id+'"></svg><p>'+p.id+'</p><p><b>'+p.nombre+'</b></p></div>'});
   h+='<script>window.onload=function(){'+prods.map(function(p){return'JsBarcode(\'#bc'+p.id+'\',\''+p.id+'\',{format:\'CODE128\',displayValue:false,height:38})'}).join(';')+';setTimeout(window.print,800)}<\/script></body></html>';
   var w=window.open('','_blank');w.document.write(h);w.document.close();
