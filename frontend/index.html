@@ -2693,15 +2693,21 @@ function openClientesModal() {
 async function loadClientesDropdown() {
   try {
     var clientes = await apiGet('/clientes');
-    var select = document.getElementById('pos-cliente');
     var html = '';
     clientes.forEach(function(c) {
       html += '<option value="' + c.id + ' - ' + c.nombre.replace(/"/g,'&quot;') + '">' + c.id + ' - ' + c.nombre + '</option>';
     });
-    select.innerHTML = html;
-    select.value = '222222 - CLIENTE POS'; // Por defecto
+    var select = document.getElementById('pos-cliente');
+    if (select) {
+      select.innerHTML = html;
+      select.value = '222222 - CLIENTE POS'; // Por defecto
+    }
+    var cotSelect = document.getElementById('cotizador-cliente');
+    if (cotSelect) {
+      cotSelect.innerHTML = html;
+    }
   } catch(e) {
-    console.error('Error cargando clientes POS:', e);
+    console.error('Error cargando clientes:', e);
   }
 }
 
@@ -2880,7 +2886,8 @@ function imprimirSimulacion() {
 var cotizadorProductos = [];
 
 async function abrirCotizadorCredito() {
-  document.getElementById('cotizador-cliente').innerHTML = document.getElementById('pos-cliente').innerHTML;
+  // El select de clientes del cotizador ahora se llena directamente en loadClientesDropdown()
+  // por lo que ya no dependemos del select del módulo POS.
   
   document.getElementById('cotizador-search-prod').value = '';
   document.getElementById('cotizador-barcode').value = '';
