@@ -2625,7 +2625,7 @@ document.addEventListener('DOMContentLoaded',function(){
     ov.addEventListener('click',function(e){if(e.target===ov)closeModal(ov.id)});
   });
   document.addEventListener('keydown',function(e){
-    if(!pinActivo)return;
+    if(typeof pinActivo === 'undefined' || !pinActivo) return;
     if(e.key>='0'&&e.key<='9'){e.preventDefault();pinPress(e.key);}
     else if(e.key==='Backspace'){e.preventDefault();pinClear();}
     else if(e.key==='Enter'){e.preventDefault();pinEnter();}
@@ -3046,7 +3046,7 @@ async function guardarPlanCreditoAprobado() {
      hideLoading();
      toast('Plan pre-aprobado exitosamente', 'success');
      closeModal('modal-credito-plan');
-     loadCartera();
+     reloadCartera();
   } catch(e) {
      hideLoading();
      toast('Error guardando plan: ' + e.message, 'error');
