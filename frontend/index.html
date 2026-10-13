@@ -2690,7 +2690,8 @@ function openClientesModal() {
   loadClientesLista();
 }
 
-async function loadClientesDropdown() {
+async function loadClientesDropdown(resetPosDefault) {
+  if (resetPosDefault === undefined) resetPosDefault = true;
   try {
     var clientes = await apiGet('/clientes');
     var html = '';
@@ -2700,14 +2701,15 @@ async function loadClientesDropdown() {
     var select = document.getElementById('pos-cliente');
     if (select) {
       select.innerHTML = html;
-      select.value = '222222 - CLIENTE POS'; // Por defecto
+      if (resetPosDefault) select.value = '222222 - CLIENTE POS'; // Por defecto
     }
     var cotSelect = document.getElementById('cotizador-cliente');
     if (cotSelect) {
-      cotSelect.innerHTML = html;
+      cotSelect.innerHTML = html || '<option value="" disabled selected>No hay clientes — créalos en Configuración</option>';
     }
   } catch(e) {
     console.error('Error cargando clientes:', e);
+    toast('No se pudieron cargar los clientes: ' + e.message, 'error');
   }
 }
 
@@ -2886,9 +2888,11 @@ function imprimirSimulacion() {
 var cotizadorProductos = [];
 
 async function abrirCotizadorCredito() {
-  // El select de clientes del cotizador ahora se llena directamente en loadClientesDropdown()
-  // por lo que ya no dependemos del select del módulo POS.
-  
+  // Refresca la lista de clientes cada vez que se abre el cotizador, por si se
+  // creó/editó un cliente en Configuración después de la carga inicial de la página.
+  // resetPosDefault=false: no tocar el cliente ya seleccionado en el POS si hay una venta en curso.
+  await loadClientesDropdown(false);
+
   document.getElementById('cotizador-search-prod').value = '';
   document.getElementById('cotizador-barcode').value = '';
   document.getElementById('cotizador-search-results').style.display = 'none';
