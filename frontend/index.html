@@ -981,8 +981,16 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="form-group"><label>Saldo a Financiar</label><input type="text" id="credito-saldo" readonly style="background:var(--bg)"></div>
       </div>
       
-      <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div class="form-group"><label>N° Cuotas</label><input type="number" id="credito-cuotas" value="4" min="1" oninput="calcularPlanCredito()"></div>
+      <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label>N° Cuotas</label><input type="number" id="credito-cuotas" value="4" min="1" oninput="onNumCuotasInput()"></div>
+        <div class="form-group">
+          <label>Cuota deseada (opcional)</label>
+          <input type="number" id="credito-valor-cuota-deseado" placeholder="Ej: 50000" min="1" oninput="calcularPlanCredito()">
+          <small style="color:var(--text-light);font-size:10px">Si la llenas, calculamos el N° de cuotas por ti</small>
+        </div>
+      </div>
+
+      <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group">
           <label>Frecuencia</label>
           <select id="credito-frecuencia" onchange="calcularPlanCredito()">
@@ -2807,6 +2815,12 @@ async function deleteCliente(id) {
 // ════════════════════════════════
 var currentCuotasSimuladas = [];
 
+function onNumCuotasInput() {
+  // El usuario está fijando el N° de cuotas a mano: ya no debe mandar la "cuota deseada".
+  document.getElementById('credito-valor-cuota-deseado').value = '';
+  calcularPlanCredito();
+}
+
 function calcularPlanCredito() {
   var precioContado = parseFloat(document.getElementById('credito-precio-contado').value) || 0;
   var recargoPorcentaje = parseFloat(document.getElementById('credito-recargo-porcentaje').value) || 0;
@@ -2821,11 +2835,25 @@ function calcularPlanCredito() {
   var inicial = parseFloat(document.getElementById('credito-inicial').value) || 0;
   var saldo = Math.max(0, totalCredito - inicial);
   document.getElementById('credito-saldo').value = fmt(saldo);
-  
-  var nCuotas = parseInt(document.getElementById('credito-cuotas').value) || 1;
+
+  var cuotasInput = document.getElementById('credito-cuotas');
+  var valorDeseado = parseFloat(document.getElementById('credito-valor-cuota-deseado').value) || 0;
+  var nCuotas;
+  if (valorDeseado > 0 && saldo > 0) {
+    // El cliente dijo cuánto puede pagar por cuota: calculamos cuántas cuotas se necesitan.
+    nCuotas = Math.ceil(saldo / valorDeseado);
+    if (nCuotas > 120) { // seguro ante un valor de cuota demasiado bajo
+      nCuotas = 120;
+      toast('La cuota indicada es muy baja para el saldo; se limitó a 120 cuotas', 'warning');
+    }
+    nCuotas = Math.max(1, nCuotas);
+    cuotasInput.value = nCuotas;
+  } else {
+    nCuotas = parseInt(cuotasInput.value) || 1;
+  }
   var frec = document.getElementById('credito-frecuencia').value;
   var fInicio = document.getElementById('credito-inicio').value;
-  
+
   if(!fInicio) return;
   
   var valorCuota = saldo / nCuotas;
@@ -2907,6 +2935,7 @@ async function abrirCotizadorCredito() {
   
   document.getElementById('credito-recargo-porcentaje').value = '15';
   document.getElementById('credito-inicial').value = '';
+  document.getElementById('credito-valor-cuota-deseado').value = '';
   document.getElementById('credito-saldo').value = '';
   document.getElementById('credito-inicio').value = todayStr();
   document.getElementById('credito-cuotas-body').innerHTML = '';
