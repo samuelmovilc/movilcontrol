@@ -1328,7 +1328,17 @@ function updateCartItem(i,field,val){
   renderCart();
 }
 function removeFromCart(i){cart.splice(i,1);renderCart()}
-function clearCart(){cart=[];renderCart();document.getElementById('paga-con').value='';calcChange();initPayRows()}
+function clearCart(){
+  cart=[];renderCart();document.getElementById('paga-con').value='';calcChange();initPayRows();
+  // Soltar cualquier cotización de crédito cargada: si no, un "Limpiar" a medio camino
+  // dejaba posImportedPlanId apuntando a un plan viejo y el combo de cliente bloqueado.
+  posImportedPlanId = null;
+  var posClienteSelect = document.getElementById('pos-cliente');
+  if (posClienteSelect) {
+    posClienteSelect.disabled = false;
+    posClienteSelect.value = '222222 - CLIENTE POS';
+  }
+}
 function updateTotal(){
   var total=cart.reduce(function(s,c){return s+c.subtotal},0);
   document.getElementById('cart-total').textContent=fmt(total);calcChange();
@@ -1430,6 +1440,11 @@ async function cargarCotizacionAlPOS(planId) {
       }
       if (!clienteEncontrado) {
         toast('No se encontró el cliente del plan (' + plan.cliente_id + ') en la lista. Selecciónalo manualmente.', 'warning');
+      } else {
+        // Bloquear el combo: esta venta ya está atada al cliente del plan de crédito.
+        // Si se permitiera cambiarlo aquí, la venta quedaría a nombre de otro cliente
+        // mientras el crédito (cuotas, abonos) sigue bajo el cliente original.
+        posClienteSelect.disabled = true;
       }
 
       // 2. Cargar los productos al carrito ajustando el precio inflado

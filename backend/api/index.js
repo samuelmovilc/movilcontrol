@@ -401,6 +401,27 @@ app.post('/api/ventas', tenantAuth, async (req, res) => {
     const isCredito = (metodo_pago && metodo_pago.toLowerCase().includes('crédito')) || (metodos_pago && metodos_pago.some(m => String(m.metodo).toLowerCase().includes('crédito')));
     const estadoPago = isCredito ? 'credito' : 'contado';
 
+    // Si la venta viene de un plan de crédito pre-aprobado (Cartera -> Cargar Cotización),
+    // el cliente de la venta DEBE ser el mismo del plan. Sin esta validación, si en el
+    // POS se cambia el cliente seleccionado después de cargar la cotización, la venta
+    // queda a nombre de un cliente mientras las cuotas/abonos del crédito siguen bajo
+    // el cliente original del plan — un descuadre de cartera.
+    if (isCredito && req.body.credito_plan_id) {
+      const [[planCheck]] = await conn.query('SELECT cliente_id, estado FROM creditos WHERE id=?', [req.body.credito_plan_id]);
+      if (!planCheck) {
+        await conn.rollback(); conn.release();
+        return res.status(404).json({ error: 'El plan de crédito indicado no existe' });
+      }
+      if (planCheck.cliente_id !== clienteId) {
+        await conn.rollback(); conn.release();
+        return res.status(409).json({ error: 'El cliente seleccionado (' + clienteId + ') no coincide con el cliente del plan de crédito (' + planCheck.cliente_id + ')' });
+      }
+      if (planCheck.estado !== 'aprobado') {
+        await conn.rollback(); conn.release();
+        return res.status(409).json({ error: 'Ese plan de crédito ya no está en estado aprobado (está ' + planCheck.estado + ')' });
+      }
+    }
+
     // Insertar venta
     const [result] = await conn.query(
       'INSERT INTO ventas (folio,fecha,hora,cliente,cliente_id,observaciones,metodo_pago,metodos_pago,total,cambio,estado,estado_pago) VALUES (?,?,?,?,?,?,?,?,?,?,"aceptada",?)',
