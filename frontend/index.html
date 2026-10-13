@@ -2861,16 +2861,20 @@ function calcularPlanCredito() {
   currentCuotasSimuladas = [];
   
   var fecha = new Date(fInicio + 'T12:00:00Z');
-  
+
   for(var i=1; i<=nCuotas; i++) {
-    var fStr = localDateStr(fecha);
-    currentCuotasSimuladas.push({ numero: i, fecha: fStr, valor: valorCuota });
-    tbody += '<tr><td>'+i+'</td><td>'+fmtDate(fStr)+'</td><td>'+fmt(valorCuota)+'</td></tr>';
-    
-    // Avanzar fecha
+    // Avanzar fecha ANTES de mostrarla: la cuota 1 vence un período después
+    // del inicio (no el mismo día), igual que lo genera el backend en
+    // POST /api/ventas al concretar la venta. Si esto cambiara aquí sin
+    // cambiar allá, la cotización impresa dejaría de coincidir con las
+    // fechas reales que le queden al cliente.
     if(frec === 'semanal') fecha.setDate(fecha.getDate() + 7);
     else if(frec === 'quincenal') fecha.setDate(fecha.getDate() + 15);
     else if(frec === 'mensual') fecha.setMonth(fecha.getMonth() + 1);
+
+    var fStr = localDateStr(fecha);
+    currentCuotasSimuladas.push({ numero: i, fecha: fStr, valor: valorCuota });
+    tbody += '<tr><td>'+i+'</td><td>'+fmtDate(fStr)+'</td><td>'+fmt(valorCuota)+'</td></tr>';
   }
   
   document.getElementById('credito-cuotas-body').innerHTML = tbody;
