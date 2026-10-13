@@ -283,6 +283,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   .modal-body {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 15px;
   }
   .modal-footer {
@@ -342,6 +343,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   .desktop-only { display: none !important; }
   .resp-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
   #modal-cartera-detalle .modal-body { grid-template-columns: 1fr !important; }
+  #modal-cartera-detalle .modal-body > div { min-width: 0; }
 }
 /* FAB STYLES */
 .fab-cart {
@@ -3298,7 +3300,7 @@ async function verDetalleCredito(id) {
     
     var cuotasHtml = '';
     if ((cred.cuotas || []).length === 0 && cred.estado === 'aprobado') {
-       cuotasHtml = '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:10px">' +
+       cuotasHtml = '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:10px;white-space:normal;word-break:break-word">' +
          'Todavía sin cuotas: es un plan apartado. Los abonos de esta etapa se suman como abono inicial y las cuotas se generan cuando se entregue el producto en el POS.' +
        '</td></tr>';
     } else {
