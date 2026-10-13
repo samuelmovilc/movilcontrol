@@ -410,6 +410,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .cartera-state-btn:hover { background: rgba(0,0,0,0.04); }
 .cartera-state-btn.active { background: var(--electric); color: #fff; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3); }
 .cartera-client-select { padding: 7px 12px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; outline: none; min-width: 250px; background: #fff; }
+.cartera-icon-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 
 @media(max-width:900px){
   .cartera-summary-grid { grid-template-columns: 1fr !important; }
@@ -417,6 +418,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   .cartera-client-select { min-width: 100%; width: 100%; margin-top: 5px; }
   .cartera-filters-bar { flex-direction: column; align-items: stretch; }
   .cartera-filters-left { flex-direction: column; align-items: stretch; }
+  .cartera-icon-actions { align-self: center; width: auto; }
 }
 
 /* ── SAAS LOGIN ── */
@@ -721,8 +723,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <select id="filter-cartera-cliente" class="cartera-client-select" onchange="loadCartera()">
           <option value="">Todos los clientes...</option>
         </select>
-        <button class="btn btn-secondary btn-xs" onclick="clearCarteraFilters()" title="Borrar Filtros" style="padding: 7px 10px; border-radius: 50%;"><i class="fa-solid fa-filter-circle-xmark"></i></button>
-        <button class="btn btn-secondary btn-xs" onclick="reloadCartera()" title="Actualizar" style="padding: 7px 10px; border-radius: 50%;"><i class="fa-solid fa-rotate-right"></i></button>
+        <div class="cartera-icon-actions">
+          <button class="btn btn-secondary btn-xs" onclick="clearCarteraFilters()" title="Borrar Filtros" style="padding: 7px 10px; border-radius: 50%;"><i class="fa-solid fa-filter-circle-xmark"></i></button>
+          <button class="btn btn-secondary btn-xs" onclick="reloadCartera()" title="Actualizar" style="padding: 7px 10px; border-radius: 50%;"><i class="fa-solid fa-rotate-right"></i></button>
+        </div>
       </div>
       <div class="cartera-filters-right">
         <button class="btn btn-primary" onclick="abrirCotizadorCredito()"><i class="fa-solid fa-calculator"></i> Cotizar Nuevo Crédito</button>
