@@ -810,12 +810,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           </div>
         </div>
         
-        <div class="card" style="margin:0;padding:12px;background:var(--surface2)">
-          <h4 style="margin-bottom:10px;color:var(--electric)"><i class="fa-solid fa-money-bill-transfer"></i> Registrar Abono</h4>
+        <div class="card" style="margin:0;padding:12px;background:var(--surface2);display:flex;flex-direction:column;gap:12px">
+          <h4 style="margin-bottom:-4px;color:var(--electric)"><i class="fa-solid fa-money-bill-transfer"></i> Registrar Abono</h4>
           <div class="form-group"><label>Monto a Abonar</label><input type="number" id="cartera-abono-monto" placeholder="0.00"></div>
           <div class="form-group"><label>Método de Pago</label><select id="cartera-abono-metodo"></select></div>
           <div class="form-group"><label>Observaciones</label><input type="text" id="cartera-abono-obs" placeholder="Opcional"></div>
-          <button class="btn btn-primary" onclick="registrarAbonoCartera()" style="width:100%;justify-content:center"><i class="fa-solid fa-check"></i> Aplicar Abono</button>
+          <button class="btn btn-primary" onclick="registrarAbonoCartera()" style="width:100%;justify-content:center;padding:10px 15px;margin-top:4px"><i class="fa-solid fa-check"></i> Aplicar Abono</button>
         </div>
       </div>
     </div>
