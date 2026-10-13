@@ -1413,16 +1413,25 @@ async function cargarCotizacionAlPOS(planId) {
     var plan = await apiGet('/creditos/'+planId);
     if(plan) {
       posImportedPlanId = plan.id;
-      
-      // 1. Seleccionar el cliente en el POS
+
+      // 1. Refrescar la lista de clientes del POS antes de buscar — si el cliente del
+      // plan se creó/editó después de la última carga, el combo podía estar
+      // desactualizado y la selección fallaba en silencio (resetPosDefault=false:
+      // no pisar la selección si ya había algo elegido en el POS).
+      await loadClientesDropdown(false);
       var posClienteSelect = document.getElementById('pos-cliente');
+      var clienteEncontrado = false;
       for(var i=0; i<posClienteSelect.options.length; i++) {
         if(posClienteSelect.options[i].value.startsWith(plan.cliente_id)) {
           posClienteSelect.selectedIndex = i;
+          clienteEncontrado = true;
           break;
         }
       }
-      
+      if (!clienteEncontrado) {
+        toast('No se encontró el cliente del plan (' + plan.cliente_id + ') en la lista. Selecciónalo manualmente.', 'warning');
+      }
+
       // 2. Cargar los productos al carrito ajustando el precio inflado
       cart = [];
       if(plan.productos && plan.productos.length > 0) {
