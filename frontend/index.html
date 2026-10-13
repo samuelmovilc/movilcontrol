@@ -2983,7 +2983,9 @@ function renderCotizadorProductos() {
     var subtotal = p.precio * p.cantidad;
     totalContado += subtotal;
     html += '<div style="display:flex;justify-content:space-between;align-items:center;background:#fff;padding:5px;border:1px solid var(--border);border-radius:4px">';
-    html += '<div style="flex:1;font-size:11px"><b>'+p.nombre+'</b><br><span style="color:var(--text-light)">'+fmt(p.precio)+' x </span>';
+    html += '<div style="flex:1;font-size:11px"><b>'+p.nombre+'</b><br>';
+    html += '<input type="number" value="'+p.precio+'" min="0" step="any" title="Precio solo para esta cotización (no cambia el catálogo)" style="width:75px;padding:2px;font-size:11px;border:1px solid var(--border);border-radius:3px;text-align:right" onchange="updateCotizadorProdPrecio('+idx+', this.value)">';
+    html += ' <span style="color:var(--text-light)"> x </span>';
     html += '<input type="number" value="'+p.cantidad+'" min="1" max="'+p.stock+'" style="width:45px;padding:2px;font-size:11px;border:1px solid var(--border);border-radius:3px;text-align:center" onchange="updateCotizadorProdQty('+idx+', this.value, '+p.stock+')">';
     html += '</div>';
     html += '<div style="font-weight:bold;margin-right:10px">'+fmt(subtotal)+'</div>';
@@ -3005,6 +3007,20 @@ function updateCotizadorProdQty(idx, val, maxStock) {
   if(qty > maxStock) { qty = maxStock; toast('Stock máximo: '+maxStock, 'error'); }
   if(qty < 1) qty = 1;
   cotizadorProductos[idx].cantidad = qty;
+  renderCotizadorProductos();
+}
+
+function updateCotizadorProdPrecio(idx, val) {
+  // Precio editable SOLO para esta cotización: no modifica el producto en Productos.
+  // Queda guardado así en el plan (productos_cotizados) y es lo que se carga al POS
+  // cuando se convierta en venta, así que el total del crédito siempre coincide.
+  var precio = parseFloat(val);
+  if (isNaN(precio) || precio < 0) {
+    toast('Precio inválido', 'error');
+    renderCotizadorProductos(); // revertir al valor anterior
+    return;
+  }
+  cotizadorProductos[idx].precio = precio;
   renderCotizadorProductos();
 }
 
