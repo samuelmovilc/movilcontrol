@@ -980,7 +980,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="form-group"><label>Abono Inicial</label><input type="number" id="credito-inicial" placeholder="0" oninput="calcularPlanCredito()"></div>
         <div class="form-group"><label>Saldo a Financiar</label><input type="text" id="credito-saldo" readonly style="background:var(--bg)"></div>
       </div>
-      
+
+      <div id="credito-interes-real-box" style="margin:0 0 10px;padding:8px 10px;background:var(--electric-pale);border-radius:var(--radius-sm);font-size:12px;color:var(--electric-dark);display:none">
+        <i class="fa-solid fa-circle-info"></i> Interés simple real sobre lo financiado: <b id="credito-interes-real-valor">0%</b>
+        <span style="color:var(--text-light)"> (el abono inicial reduce el capital prestado, así que el interés real queda más alto que el % de recargo)</span>
+      </div>
+
       <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group"><label>N° Cuotas</label><input type="number" id="credito-cuotas" value="4" min="1" oninput="onNumCuotasInput()"></div>
         <div class="form-group">
@@ -2835,6 +2840,22 @@ function calcularPlanCredito() {
   var inicial = parseFloat(document.getElementById('credito-inicial').value) || 0;
   var saldo = Math.max(0, totalCredito - inicial);
   document.getElementById('credito-saldo').value = fmt(saldo);
+
+  // Interés simple real: el recargo en pesos (precioContado * recargoPorcentaje/100) es fijo,
+  // pero el capital que realmente se presta es (precioContado - inicial). A mayor abono
+  // inicial, ese mismo recargo representa un % más alto sobre lo que de verdad se financió.
+  var interesBox = document.getElementById('credito-interes-real-box');
+  var interesValorEl = document.getElementById('credito-interes-real-valor');
+  if (interesBox && interesValorEl) {
+    var capitalFinanciado = precioContado - inicial;
+    if (precioContado > 0 && capitalFinanciado > 0) {
+      var interesRealPct = (recargoPorcentaje * precioContado) / capitalFinanciado;
+      interesValorEl.textContent = interesRealPct.toFixed(1) + '%';
+      interesBox.style.display = 'block';
+    } else {
+      interesBox.style.display = 'none';
+    }
+  }
 
   var cuotasInput = document.getElementById('credito-cuotas');
   var valorDeseado = parseFloat(document.getElementById('credito-valor-cuota-deseado').value) || 0;
