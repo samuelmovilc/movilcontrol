@@ -127,7 +127,7 @@ tbody td{padding:5px 9px}
 .btn-excel{background:#1D6F42;color:#fff}.btn-excel:hover{background:#155433}
 .btn-orange{background:#FF6B00;color:#fff}.btn-orange:hover{background:#e55a00}
 .btn-sm{padding:3px 9px;font-size:11px}.btn-xs{padding:2px 7px;font-size:10.5px}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,22,40,.52);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,22,40,.52);z-index:20000;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
 .modal-overlay.open{display:flex}
 .modal{background:var(--surface);border-radius:10px;box-shadow:0 8px 40px rgba(0,102,255,.22);width:90%;max-width:580px;max-height:92vh;overflow-y:auto;border:1px solid var(--border-strong)}
 .modal-header{background:linear-gradient(135deg,var(--electric) 0%,#0052CC 100%);color:#fff;padding:11px 16px;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:13.5px}
@@ -1076,13 +1076,18 @@ function saasLogout() {
 
 function checkModules() {
   const mods = JSON.parse(localStorage.getItem('saas_modules') || '{}');
-  if(mods.pos === false) document.getElementById('tab-pos').style.display = 'none';
-  if(mods.productos === false) document.getElementById('tab-productos').style.display = 'none';
-  if(mods.clientes === false) document.getElementById('tab-clientes').style.display = 'none';
-  if(mods.cartera === false) document.getElementById('tab-cartera').style.display = 'none';
-  if(mods.finanzas === false) document.getElementById('tab-finanzas').style.display = 'none';
-  if(mods.config === false) document.getElementById('tab-config').style.display = 'none';
-  
+  // tab-clientes y tab-finanzas no existen como pestañas en el HTML actual
+  // (clientes vive dentro de un modal en Config; finanzas no tiene tab propia).
+  // Antes, si un tenant tenía ese módulo desactivado, esto tiraba un error y
+  // tumbaba el resto de initApp() (productos, clientes, caja, todo quedaba sin cargar).
+  var tabIds = { pos:'tab-pos', productos:'tab-productos', clientes:'tab-clientes', cartera:'tab-cartera', finanzas:'tab-finanzas', config:'tab-config' };
+  Object.keys(tabIds).forEach(function(mod) {
+    if (mods[mod] === false) {
+      var el = document.getElementById(tabIds[mod]);
+      if (el) el.style.display = 'none';
+    }
+  });
+
   // Update business name in UI if element exists
   const bName = localStorage.getItem('saas_business');
   const bTitle = document.querySelector('.app-logo');
@@ -3514,7 +3519,7 @@ async function loadInforme() {
 </script>
 
 <!-- SMART COMMERCE WIZARD MODAL -->
-<div class="modal-overlay" id="modal-smart-wizard" style="z-index:9999;">
+<div class="modal-overlay" id="modal-smart-wizard">
   <div class="modal" style="width: 800px; max-width: 95vw; max-height: 90vh; overflow-y: auto;">
     <div class="modal-header" style="background: linear-gradient(135deg, #10b981, #3b82f6); color: white;">
       <h3><i class="fa-solid fa-store"></i> Crear Catálogo Smart Commerce</h3>
