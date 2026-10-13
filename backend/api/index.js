@@ -616,10 +616,15 @@ app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
     }
     const cred = creditos[0];
 
+    if (cred.estado === 'anulado' || cred.estado === 'pagado') {
+       await conn.rollback(); conn.release();
+       return res.status(409).json({ error: 'No se pueden registrar abonos en un crédito ' + cred.estado });
+    }
+
     // Aplicar monto a las cuotas vencidas/pendientes en orden
     const [cuotas] = await conn.query('SELECT * FROM credito_cuotas WHERE credito_id=? AND pagado < valor ORDER BY numero_cuota ASC', [creditoId]);
     let restante = parseFloat(monto);
-    
+
     for (const c of cuotas) {
        if (restante <= 0) break;
        const debe = parseFloat(c.valor) - parseFloat(c.pagado);
@@ -628,13 +633,23 @@ app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
        restante -= aPagar;
     }
 
+    // Si queda saldo sin aplicar (crédito todavía 'aprobado' = apartado, sin cuotas
+    // generadas, o un sobrepago que excede lo pendiente), se suma al abono inicial.
+    // Ese inicial es el que usa POST /api/ventas al activar el plan para calcular
+    // las cuotas reales, así que los abonos hechos antes de la entrega sí cuentan.
+    let inicialActualizado = parseFloat(cred.inicial || 0);
+    if (restante > 0) {
+       inicialActualizado += restante;
+       await conn.query('UPDATE creditos SET inicial=? WHERE id=?', [inicialActualizado, creditoId]);
+    }
+
     // Registrar en caja
     await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Crédito", ?, ?, ?, ?, ?)',
       [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || 'Abono a crédito', cred.cliente_id, creditoId]);
 
     // Verificar si se pagó todo
     const [todasCuotas] = await conn.query('SELECT SUM(valor) as tot, SUM(pagado) as pag FROM credito_cuotas WHERE credito_id=?', [creditoId]);
-    const totalPagado = parseFloat(todasCuotas[0].pag) + parseFloat(cred.inicial||0);
+    const totalPagado = parseFloat(todasCuotas[0].pag || 0) + inicialActualizado;
     if (totalPagado >= parseFloat(cred.total_credito) - 0.01) {
        await conn.query('UPDATE creditos SET estado="pagado" WHERE id=?', [creditoId]);
        await conn.query('UPDATE ventas SET estado_pago="contado" WHERE credito_id=?', [creditoId]); // Opcional

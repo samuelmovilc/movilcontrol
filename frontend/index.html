@@ -3193,7 +3193,7 @@ async function loadCartera() {
         '<td><span ' + badgeClass + '>' + (c.estado||'').toUpperCase() + '</span></td>' +
         '<td>' +
            '<button class="btn btn-secondary btn-xs" onclick="verDetalleCredito(' + c.id + ')"><i class="fa-solid fa-eye"></i> Detalle</button>' +
-           (c.estado === 'activo' ? ' <button class="btn btn-primary btn-xs" onclick="abrirAbonoRapido(' + c.id + ')"><i class="fa-solid fa-money-bill-wave"></i> Abonar</button>' : '') +
+           ((c.estado === 'activo' || c.estado === 'aprobado') ? ' <button class="btn btn-primary btn-xs" onclick="abrirAbonoRapido(' + c.id + ')"><i class="fa-solid fa-money-bill-wave"></i> Abonar</button>' : '') +
            (c.estado === 'aprobado' ? ' <button class="btn btn-danger btn-xs" onclick="anularCotizacion(' + c.id + ')"><i class="fa-solid fa-ban"></i> Anular</button>' : '') +
         '</td>' +
       '</tr>';
@@ -3264,18 +3264,24 @@ async function verDetalleCredito(id) {
     document.getElementById('cartera-det-saldo').textContent = fmt(cred.saldo_pendiente);
     
     var cuotasHtml = '';
-    (cred.cuotas || []).forEach(function(c) {
-       var debe = parseFloat(c.valor) - parseFloat(c.pagado);
-       var rowStyle = debe <= 0 ? 'color:var(--text-light);background:var(--surface)' : '';
-       var estadoTxt = debe <= 0 ? 'Pagado' : 'Pdte';
-       cuotasHtml += '<tr style="'+rowStyle+'">' +
-         '<td>' + c.numero_cuota + '</td>' +
-         '<td>' + fmtDate(c.fecha_vence) + '</td>' +
-         '<td>' + fmt(c.valor) + '</td>' +
-         '<td>' + fmt(c.pagado) + '</td>' +
-         '<td>' + estadoTxt + '</td>' +
-       '</tr>';
-    });
+    if ((cred.cuotas || []).length === 0 && cred.estado === 'aprobado') {
+       cuotasHtml = '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:10px">' +
+         'Todavía sin cuotas: es un plan apartado. Los abonos de esta etapa se suman como abono inicial y las cuotas se generan cuando se entregue el producto en el POS.' +
+       '</td></tr>';
+    } else {
+      (cred.cuotas || []).forEach(function(c) {
+         var debe = parseFloat(c.valor) - parseFloat(c.pagado);
+         var rowStyle = debe <= 0 ? 'color:var(--text-light);background:var(--surface)' : '';
+         var estadoTxt = debe <= 0 ? 'Pagado' : 'Pdte';
+         cuotasHtml += '<tr style="'+rowStyle+'">' +
+           '<td>' + c.numero_cuota + '</td>' +
+           '<td>' + fmtDate(c.fecha_vence) + '</td>' +
+           '<td>' + fmt(c.valor) + '</td>' +
+           '<td>' + fmt(c.pagado) + '</td>' +
+           '<td>' + estadoTxt + '</td>' +
+         '</tr>';
+      });
+    }
     document.getElementById('cartera-det-cuotas').innerHTML = cuotasHtml;
     
     // Configurar select de abonos
