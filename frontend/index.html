@@ -413,6 +413,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .cartera-state-btn.active { background: var(--electric); color: #fff; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3); }
 .cartera-client-select { padding: 7px 12px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; outline: none; min-width: 250px; background: #fff; }
 .cartera-icon-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.abono-row { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 11.5px; flex-wrap: wrap; }
+.abono-row .abono-info { flex: 1; min-width: 140px; }
+.abono-row .abono-monto { font-weight: 800; color: var(--green-dark); font-size: 13px; }
+.abono-row .abono-meta { color: var(--text-light); font-size: 10.5px; margin-top: 2px; }
+.abono-row .abono-actions { display: flex; gap: 6px; }
+.abono-empty { color: var(--text-light); font-size: 12px; text-align: center; padding: 10px; }
 
 @media(max-width:900px){
   .cartera-summary-grid { grid-template-columns: 1fr !important; }
@@ -800,8 +806,11 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
             <tbody id="cartera-det-cuotas"></tbody>
           </table>
         </div>
+
+        <h4 style="margin:15px 0 8px;color:var(--electric)"><i class="fa-solid fa-clock-rotate-left"></i> Historial de Abonos</h4>
+        <div id="cartera-det-abonos" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
-      
+
       <!-- Totales y Abono -->
       <div style="display:flex;flex-direction:column;gap:15px">
         <div class="card" style="margin:0;padding:12px;background:var(--bg)">
@@ -811,13 +820,14 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
             <span>Saldo:</span><strong id="cartera-det-saldo" style="color:var(--red);font-size:14px"></strong>
           </div>
         </div>
-        
+
         <div class="card" style="margin:0;padding:12px;background:var(--surface2);display:flex;flex-direction:column;gap:12px">
-          <h4 style="margin-bottom:-4px;color:var(--electric)"><i class="fa-solid fa-money-bill-transfer"></i> Registrar Abono</h4>
+          <h4 id="cartera-abono-form-title" style="margin-bottom:-4px;color:var(--electric)"><i class="fa-solid fa-money-bill-transfer"></i> Registrar Abono</h4>
           <div class="form-group"><label>Monto a Abonar</label><input type="number" id="cartera-abono-monto" placeholder="0.00"></div>
           <div class="form-group"><label>Método de Pago</label><select id="cartera-abono-metodo"></select></div>
           <div class="form-group"><label>Observaciones</label><input type="text" id="cartera-abono-obs" placeholder="Opcional"></div>
-          <button class="btn btn-primary" onclick="registrarAbonoCartera()" style="width:100%;justify-content:center;padding:10px 15px;margin-top:4px"><i class="fa-solid fa-check"></i> Aplicar Abono</button>
+          <button class="btn btn-primary" id="cartera-abono-submit-btn" onclick="registrarAbonoCartera()" style="width:100%;justify-content:center;padding:10px 15px;margin-top:4px"><i class="fa-solid fa-check"></i> Aplicar Abono</button>
+          <button class="btn btn-secondary" id="cartera-abono-cancel-btn" onclick="cancelarEdicionAbono()" style="width:100%;justify-content:center;display:none"><i class="fa-solid fa-xmark"></i> Cancelar edición</button>
         </div>
       </div>
     </div>
@@ -907,7 +917,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 <div class="modal-overlay" id="modal-confirm">
   <div class="modal" style="max-width:360px">
     <div class="modal-header"><span id="confirm-title">Confirmar</span></div>
-    <div class="modal-body"><p id="confirm-msg" style="font-size:13.5px;line-height:1.5"></p></div>
+    <div class="modal-body"><p id="confirm-msg" style="font-size:13.5px;line-height:1.5;white-space:pre-line"></p></div>
     <div class="modal-footer">
       <button class="btn btn-danger" id="confirm-ok">Confirmar</button>
       <button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancelar</button>
@@ -3166,6 +3176,8 @@ async function guardarPlanCreditoAprobado() {
 // MÓDULO DE CARTERA
 // ════════════════════════════════
 var currentCarteraId = null;
+var currentCarteraAbonos = [];
+var editingAbonoId = null;
 
 let carteraAllCreditos = null;
 
@@ -3324,13 +3336,65 @@ async function verDetalleCredito(id) {
     selMetodos.innerHTML = (configCache.metodos_pago||[]).filter(function(m){return !m.toLowerCase().includes('crédito')}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
     
     document.getElementById('cartera-abono-monto').value = '';
-    document.getElementById('cartera-abono-obs').value = '';
-    
+    // Historial de abonos
+    currentCarteraAbonos = cred.abonos || [];
+    renderAbonosList();
+    cancelarEdicionAbono();
+
     openModal('modal-cartera-detalle');
   } catch(e) {
     toast('Error: ' + e.message, 'error');
   }
   hideLoading();
+}
+
+function renderAbonosList() {
+  var cont = document.getElementById('cartera-det-abonos');
+  if(!cont) return;
+  if(!currentCarteraAbonos.length) {
+    cont.innerHTML = '<div class="abono-empty">Todavía no se han registrado abonos.</div>';
+    return;
+  }
+  cont.innerHTML = currentCarteraAbonos.map(function(a){
+    var metaParts = [fmtDate(a.created_at), a.metodo_pago || 'Efectivo'];
+    if(a.observaciones && a.observaciones !== 'Abono a crédito') metaParts.push(a.observaciones);
+    return '<div class="abono-row">' +
+        '<div class="abono-info">' +
+          '<div class="abono-monto">' + fmt(a.monto) + '</div>' +
+          '<div class="abono-meta">' + metaParts.join(' · ') + '</div>' +
+        '</div>' +
+        '<div class="abono-actions">' +
+          '<button class="btn btn-secondary btn-xs" onclick="editarAbonoCartera(' + a.id + ')" title="Editar abono"><i class="fa-solid fa-pen"></i></button>' +
+          '<button class="btn btn-danger btn-xs" onclick="eliminarAbonoCartera(' + a.id + ')" title="Eliminar abono"><i class="fa-solid fa-trash"></i></button>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function editarAbonoCartera(abonoId) {
+  var abono = currentCarteraAbonos.find(function(a){ return a.id === abonoId; });
+  if(!abono) return;
+  editingAbonoId = abonoId;
+  document.getElementById('cartera-abono-monto').value = abono.monto;
+  document.getElementById('cartera-abono-metodo').value = abono.metodo_pago || 'Efectivo';
+  document.getElementById('cartera-abono-obs').value = (abono.observaciones && abono.observaciones !== 'Abono a crédito') ? abono.observaciones : '';
+  document.getElementById('cartera-abono-form-title').innerHTML = '<i class="fa-solid fa-pen"></i> Editar Abono #' + abono.id;
+  document.getElementById('cartera-abono-submit-btn').innerHTML = '<i class="fa-solid fa-check"></i> Guardar Cambios';
+  document.getElementById('cartera-abono-cancel-btn').style.display = '';
+  var inputMonto = document.getElementById('cartera-abono-monto');
+  inputMonto.scrollIntoView({behavior:'smooth', block:'center'});
+  inputMonto.focus();
+}
+
+function cancelarEdicionAbono() {
+  editingAbonoId = null;
+  document.getElementById('cartera-abono-monto').value = '';
+  document.getElementById('cartera-abono-obs').value = '';
+  var selMetodos = document.getElementById('cartera-abono-metodo');
+  if(selMetodos && selMetodos.options.length) selMetodos.selectedIndex = 0;
+  document.getElementById('cartera-abono-form-title').innerHTML = '<i class="fa-solid fa-money-bill-transfer"></i> Registrar Abono';
+  document.getElementById('cartera-abono-submit-btn').innerHTML = '<i class="fa-solid fa-check"></i> Aplicar Abono';
+  document.getElementById('cartera-abono-cancel-btn').style.display = 'none';
 }
 
 async function abrirAbonoRapido(creditoId) {
@@ -3346,26 +3410,65 @@ async function registrarAbonoCartera() {
   var monto = parseFloat(document.getElementById('cartera-abono-monto').value);
   var metodo = document.getElementById('cartera-abono-metodo').value;
   var obs = document.getElementById('cartera-abono-obs').value;
-  
+
   if(!monto || monto <= 0) {
     toast('Ingresa un monto válido', 'error');
     return;
   }
-  
-  showLoading('Registrando abono...');
-  try {
-    await apiPost('/creditos/' + currentCarteraId + '/abonos', {
-       monto: monto,
-       metodo_pago: metodo,
-       observaciones: obs
-    });
-    toast('Abono registrado', 'success');
-    await loadCartera();
-    await verDetalleCredito(currentCarteraId);
-  } catch(e) {
-    toast('Error registrando abono: ' + e.message, 'error');
-  }
-  hideLoading();
+
+  var esEdicion = !!editingAbonoId;
+  var titulo = esEdicion ? 'Confirmar edición de abono' : 'Confirmar abono';
+  var msg = (esEdicion ? 'Vas a actualizar el abono #' + editingAbonoId + ' a:' : 'Vas a registrar este abono:') +
+    '\n\nMonto: ' + fmt(monto) +
+    '\nCrédito: CR-' + currentCarteraId +
+    '\nMétodo: ' + metodo +
+    (obs ? '\nObservaciones: ' + obs : '') +
+    '\n\n¿Confirmas que los datos son correctos?';
+
+  confirmDlg(titulo, msg, async function() {
+    showLoading(esEdicion ? 'Guardando cambios...' : 'Registrando abono...');
+    try {
+      if(esEdicion) {
+        await apiPut('/creditos/' + currentCarteraId + '/abonos/' + editingAbonoId, {
+          monto: monto, metodo_pago: metodo, observaciones: obs
+        });
+        toast('Abono actualizado y guardado correctamente', 'success');
+      } else {
+        await apiPost('/creditos/' + currentCarteraId + '/abonos', {
+          monto: monto, metodo_pago: metodo, observaciones: obs
+        });
+        toast('Abono registrado y guardado correctamente', 'success');
+      }
+      await loadCartera();
+      await verDetalleCredito(currentCarteraId);
+    } catch(e) {
+      toast('No se guardó el abono: ' + e.message, 'error');
+    }
+    hideLoading();
+  });
+}
+
+function eliminarAbonoCartera(abonoId) {
+  var abono = currentCarteraAbonos.find(function(a){ return a.id === abonoId; });
+  if(!abono) return;
+  var msg = 'Vas a eliminar este abono:' +
+    '\n\nMonto: ' + fmt(abono.monto) +
+    '\nFecha: ' + fmtDate(abono.created_at) +
+    '\nCrédito: CR-' + currentCarteraId +
+    '\n\nEsto revierte lo abonado en las cuotas y no se puede deshacer.\n¿Confirmas que deseas eliminarlo?';
+  confirmDlg('Eliminar Abono', msg, async function() {
+    showLoading('Eliminando abono...');
+    try {
+      await apiDelete('/creditos/' + currentCarteraId + '/abonos/' + abonoId);
+      toast('Abono eliminado correctamente', 'success');
+      if(editingAbonoId === abonoId) cancelarEdicionAbono();
+      await loadCartera();
+      await verDetalleCredito(currentCarteraId);
+    } catch(e) {
+      toast('No se pudo eliminar el abono: ' + e.message, 'error');
+    }
+    hideLoading();
+  });
 }
 
 // ════════════════════════════════

@@ -618,13 +618,63 @@ app.post('/api/creditos/plan', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Aplica un monto a las cuotas pendientes de un crédito, en orden ascendente por número
+// de cuota. Lo que no alcance para cuotas (plan todavía apartado, o un sobrepago que
+// excede lo pendiente) se devuelve para sumarlo al abono inicial.
+async function aplicarMontoACuotas(conn, creditoId, monto) {
+  const [cuotas] = await conn.query('SELECT * FROM credito_cuotas WHERE credito_id=? AND pagado < valor ORDER BY numero_cuota ASC', [creditoId]);
+  let restante = parseFloat(monto);
+  for (const c of cuotas) {
+    if (restante <= 0) break;
+    const debe = parseFloat(c.valor) - parseFloat(c.pagado);
+    const aPagar = Math.min(debe, restante);
+    await conn.query('UPDATE credito_cuotas SET pagado=pagado+? WHERE id=?', [aPagar, c.id]);
+    restante -= aPagar;
+  }
+  return restante;
+}
+
+// Revierte un monto previamente aplicado: primero lo quita de las cuotas con saldo pagado
+// (orden descendente, al revés de como se aplicó), y lo que sobre se resta del abono
+// inicial. Es una reversión aproximada cuando hay abonos posteriores de por medio, pero
+// cubre el caso normal de editar/eliminar el abono recién hecho.
+async function revertirMontoDeCuotas(conn, creditoId, monto) {
+  const [cuotas] = await conn.query('SELECT * FROM credito_cuotas WHERE credito_id=? AND pagado > 0 ORDER BY numero_cuota DESC', [creditoId]);
+  let restante = parseFloat(monto);
+  for (const c of cuotas) {
+    if (restante <= 0) break;
+    const quitar = Math.min(parseFloat(c.pagado), restante);
+    await conn.query('UPDATE credito_cuotas SET pagado=pagado-? WHERE id=?', [quitar, c.id]);
+    restante -= quitar;
+  }
+  return restante;
+}
+
+// Recalcula si el crédito debe marcarse como pagado, o reabrirse si dejó de estarlo.
+async function recalcularEstadoCredito(conn, creditoId) {
+  const [[cred]] = await conn.query('SELECT * FROM creditos WHERE id=?', [creditoId]);
+  if (!cred || cred.estado === 'anulado') return cred;
+  const [[tot]] = await conn.query('SELECT COUNT(*) as n, SUM(pagado) as pag FROM credito_cuotas WHERE credito_id=?', [creditoId]);
+  const totalPagado = parseFloat(tot.pag || 0) + parseFloat(cred.inicial || 0);
+  let nuevoEstado = cred.estado;
+  if (totalPagado >= parseFloat(cred.total_credito) - 0.01) {
+    nuevoEstado = 'pagado';
+  } else if (cred.estado === 'pagado') {
+    nuevoEstado = (parseInt(tot.n) > 0) ? 'activo' : 'aprobado';
+  }
+  if (nuevoEstado !== cred.estado) {
+    await conn.query('UPDATE creditos SET estado=? WHERE id=?', [nuevoEstado, creditoId]);
+  }
+  return { ...cred, estado: nuevoEstado };
+}
+
 app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
     const creditoId = req.params.id;
     const { monto, metodo_pago, observaciones } = req.body;
-    
+
     if (!monto || parseFloat(monto) <= 0) {
       await conn.rollback(); conn.release();
       return res.status(400).json({ error: 'Monto inválido' });
@@ -642,42 +692,117 @@ app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
        return res.status(409).json({ error: 'No se pueden registrar abonos en un crédito ' + cred.estado });
     }
 
-    // Aplicar monto a las cuotas vencidas/pendientes en orden
-    const [cuotas] = await conn.query('SELECT * FROM credito_cuotas WHERE credito_id=? AND pagado < valor ORDER BY numero_cuota ASC', [creditoId]);
-    let restante = parseFloat(monto);
-
-    for (const c of cuotas) {
-       if (restante <= 0) break;
-       const debe = parseFloat(c.valor) - parseFloat(c.pagado);
-       const aPagar = Math.min(debe, restante);
-       await conn.query('UPDATE credito_cuotas SET pagado=pagado+? WHERE id=?', [aPagar, c.id]);
-       restante -= aPagar;
-    }
-
-    // Si queda saldo sin aplicar (crédito todavía 'aprobado' = apartado, sin cuotas
-    // generadas, o un sobrepago que excede lo pendiente), se suma al abono inicial.
-    // Ese inicial es el que usa POST /api/ventas al activar el plan para calcular
-    // las cuotas reales, así que los abonos hechos antes de la entrega sí cuentan.
-    let inicialActualizado = parseFloat(cred.inicial || 0);
+    // Aplicar monto a las cuotas vencidas/pendientes en orden. Ese inicial es el que usa
+    // POST /api/ventas al activar el plan para calcular las cuotas reales, así que los
+    // abonos hechos antes de la entrega sí cuentan.
+    const restante = await aplicarMontoACuotas(conn, creditoId, monto);
     if (restante > 0) {
-       inicialActualizado += restante;
-       await conn.query('UPDATE creditos SET inicial=? WHERE id=?', [inicialActualizado, creditoId]);
+       await conn.query('UPDATE creditos SET inicial=inicial+? WHERE id=?', [restante, creditoId]);
     }
 
     // Registrar en caja
-    await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Crédito", ?, ?, ?, ?, ?)',
+    const [insertResult] = await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Crédito", ?, ?, ?, ?, ?)',
       [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || 'Abono a crédito', cred.cliente_id, creditoId]);
 
     // Verificar si se pagó todo
-    const [todasCuotas] = await conn.query('SELECT SUM(valor) as tot, SUM(pagado) as pag FROM credito_cuotas WHERE credito_id=?', [creditoId]);
-    const totalPagado = parseFloat(todasCuotas[0].pag || 0) + inicialActualizado;
-    if (totalPagado >= parseFloat(cred.total_credito) - 0.01) {
-       await conn.query('UPDATE creditos SET estado="pagado" WHERE id=?', [creditoId]);
+    const credActualizado = await recalcularEstadoCredito(conn, creditoId);
+    if (credActualizado.estado === 'pagado') {
        await conn.query('UPDATE ventas SET estado_pago="contado" WHERE credito_id=?', [creditoId]); // Opcional
     }
 
     await conn.commit(); conn.release();
-    res.json({ ok: true, mensaje: 'Abono registrado correctamente' });
+    res.json({ ok: true, mensaje: 'Abono registrado correctamente', abono_id: insertResult.insertId });
+  } catch(e) {
+    await conn.rollback(); conn.release();
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, res) => {
+  const conn = await req.tenantPool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { creditoId, abonoId } = req.params;
+    const { monto, metodo_pago, observaciones } = req.body;
+
+    if (!monto || parseFloat(monto) <= 0) {
+      await conn.rollback(); conn.release();
+      return res.status(400).json({ error: 'Monto inválido' });
+    }
+
+    const [creditos] = await conn.query('SELECT * FROM creditos WHERE id=?', [creditoId]);
+    if (!creditos.length) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: 'Crédito no encontrado' });
+    }
+    if (creditos[0].estado === 'anulado') {
+      await conn.rollback(); conn.release();
+      return res.status(409).json({ error: 'No se pueden editar abonos de un crédito anulado' });
+    }
+
+    const [abonos] = await conn.query('SELECT * FROM movimientos_caja WHERE id=? AND credito_id=? AND categoria="Abono Crédito"', [abonoId, creditoId]);
+    if (!abonos.length) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: 'Abono no encontrado' });
+    }
+    const abonoAnterior = abonos[0];
+
+    // Revertir el efecto del monto anterior y aplicar el nuevo
+    const restanteRevertir = await revertirMontoDeCuotas(conn, creditoId, abonoAnterior.monto);
+    if (restanteRevertir > 0) {
+      await conn.query('UPDATE creditos SET inicial=GREATEST(inicial-?,0) WHERE id=?', [restanteRevertir, creditoId]);
+    }
+    const restanteAplicar = await aplicarMontoACuotas(conn, creditoId, monto);
+    if (restanteAplicar > 0) {
+      await conn.query('UPDATE creditos SET inicial=inicial+? WHERE id=?', [restanteAplicar, creditoId]);
+    }
+
+    await conn.query('UPDATE movimientos_caja SET monto=?, metodo_pago=?, observaciones=? WHERE id=?',
+      [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || 'Abono a crédito', abonoId]);
+
+    await recalcularEstadoCredito(conn, creditoId);
+
+    await conn.commit(); conn.release();
+    res.json({ ok: true, mensaje: 'Abono actualizado correctamente' });
+  } catch(e) {
+    await conn.rollback(); conn.release();
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, res) => {
+  const conn = await req.tenantPool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { creditoId, abonoId } = req.params;
+
+    const [creditos] = await conn.query('SELECT * FROM creditos WHERE id=?', [creditoId]);
+    if (!creditos.length) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: 'Crédito no encontrado' });
+    }
+    if (creditos[0].estado === 'anulado') {
+      await conn.rollback(); conn.release();
+      return res.status(409).json({ error: 'No se pueden eliminar abonos de un crédito anulado' });
+    }
+
+    const [abonos] = await conn.query('SELECT * FROM movimientos_caja WHERE id=? AND credito_id=? AND categoria="Abono Crédito"', [abonoId, creditoId]);
+    if (!abonos.length) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: 'Abono no encontrado' });
+    }
+    const abono = abonos[0];
+
+    const restante = await revertirMontoDeCuotas(conn, creditoId, abono.monto);
+    if (restante > 0) {
+      await conn.query('UPDATE creditos SET inicial=GREATEST(inicial-?,0) WHERE id=?', [restante, creditoId]);
+    }
+
+    await conn.query('DELETE FROM movimientos_caja WHERE id=?', [abonoId]);
+    await recalcularEstadoCredito(conn, creditoId);
+
+    await conn.commit(); conn.release();
+    res.json({ ok: true, mensaje: 'Abono eliminado correctamente' });
   } catch(e) {
     await conn.rollback(); conn.release();
     res.status(500).json({ error: e.message });
