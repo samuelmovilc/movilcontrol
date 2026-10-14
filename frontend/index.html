@@ -1654,7 +1654,8 @@ function printTicket(venta){
   var jsPDF=window.jspdf?window.jspdf.jsPDF:(window.jsPDF||null);
   if(!jsPDF){toast('Error: jsPDF no cargó. Revisa tu conexión.','error');return;}
 
-  var pw=80; // mm ancho papel
+  var tamanoTicketCfg=cfg.tamano_ticket||cfg.tamanoTicket||'80mm';
+  var pw={'58mm':58,'80mm':80,'110mm':110}[tamanoTicketCfg]||80; // mm ancho papel (según config)
   var margin=4;
   var cw=pw-margin*2; // ancho útil
   var doc=new jsPDF({unit:'mm',format:[pw,297],orientation:'portrait'});
@@ -1663,23 +1664,45 @@ function printTicket(venta){
   var y=margin;
   var lineH=4.5;
 
+  // Detecta el formato real de la imagen (PNG/JPEG/WEBP) a partir del data-URI,
+  // en vez de asumir siempre PNG (lo que rompía logos JPEG/WEBP silenciosamente)
+  function imgFormat(dataUri){
+    var m=/^data:image\/(png|jpe?g|webp)/i.exec(dataUri||'');
+    if(!m)return 'PNG';
+    var t=m[1].toLowerCase();
+    if(t==='jpg'||t==='jpeg')return 'JPEG';
+    if(t==='webp')return 'WEBP';
+    return 'PNG';
+  }
+
   function addLine(text,size,bold,center,right){
     size=size||8;bold=bold||false;center=center||false;right=right||false;
     doc.setFontSize(size);
     doc.setFont('helvetica','bold');
-    var x=margin;
-    if(center)x=(pw-doc.getTextWidth(text))/2;
-    if(right)x=pw-margin-doc.getTextWidth(text);
-    doc.text(text,x,y);
-    y+=lineH*(size/8);
+    var lines=doc.splitTextToSize(String(text==null?'':text),cw);
+    lines.forEach(function(t){
+      var x=margin;
+      if(center)x=(pw-doc.getTextWidth(t))/2;
+      if(right)x=pw-margin-doc.getTextWidth(t);
+      doc.text(t,x,y);
+      y+=lineH*(size/8);
+    });
   }
 
   function addRow(left,right,size,bold){
     size=size||8;bold=bold||false;
     doc.setFontSize(size);
     doc.setFont('helvetica','bold');
-    doc.text(left,margin,y);
-    doc.text(right,pw-margin,y,{align:'right'});
+    // Si el texto izquierdo y derecho no caben en una sola línea sin pisarse,
+    // se baja el valor derecho a su propia línea en vez de dejarlo encimado/cortado
+    if(doc.getTextWidth(left)+doc.getTextWidth(right)+2>cw){
+      doc.text(left,margin,y);
+      y+=lineH*(size/8);
+      doc.text(right,pw-margin,y,{align:'right'});
+    }else{
+      doc.text(left,margin,y);
+      doc.text(right,pw-margin,y,{align:'right'});
+    }
     y+=lineH*(size/8);
   }
 
@@ -1696,9 +1719,9 @@ function printTicket(venta){
     try{
       var imgW=40;var imgH=15;
       var imgX=(pw-imgW)/2;
-      doc.addImage(cfg.logo,'PNG',imgX,y,imgW,imgH,undefined,'FAST');
+      doc.addImage(cfg.logo,imgFormat(cfg.logo),imgX,y,imgW,imgH,undefined,'FAST');
       y+=imgH+2;
-    }catch(e){}
+    }catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}
   }
 
   // Header negocio
@@ -1760,21 +1783,30 @@ function printTicket(venta){
   function al(text,size,bold,center){
     size=size||8;
     doc2.setFontSize(size);doc2.setFont('helvetica','bold');
-    var x=margin;
-    if(center)x=(pw-doc2.getTextWidth(text))/2;
-    doc2.text(text,x,y);y+=lineH*(size/8);
+    var lines=doc2.splitTextToSize(String(text==null?'':text),cw);
+    lines.forEach(function(t){
+      var x=margin;
+      if(center)x=(pw-doc2.getTextWidth(t))/2;
+      doc2.text(t,x,y);y+=lineH*(size/8);
+    });
   }
   function ar(left,right,size,bold){
     size=size||8;
     doc2.setFontSize(size);doc2.setFont('helvetica','bold');
-    doc2.text(left,margin,y);doc2.text(right,pw-margin,y,{align:'right'});y+=lineH*(size/8);
+    if(doc2.getTextWidth(left)+doc2.getTextWidth(right)+2>cw){
+      doc2.text(left,margin,y);y+=lineH*(size/8);
+      doc2.text(right,pw-margin,y,{align:'right'});
+    }else{
+      doc2.text(left,margin,y);doc2.text(right,pw-margin,y,{align:'right'});
+    }
+    y+=lineH*(size/8);
   }
   function as2(){
     doc2.setLineDashPattern([1,1],0);doc2.setDrawColor(0);doc2.setLineWidth(0.2);
     doc2.line(margin,y,pw-margin,y);y+=3;
   }
 
-  if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,'PNG',iX,y,iW,iH,undefined,'FAST');y+=iH+2;}catch(e){}}
+  if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+2;}catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}}
   al(nombre,10,true,true);
   if(dir)al(dir,7,false,false);
   if(tel)al('Tel: '+tel,7,false,false);
