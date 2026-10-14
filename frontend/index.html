@@ -1002,6 +1002,8 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <span style="color:var(--text-light)"> (el abono inicial reduce el capital prestado, así que el interés real queda más alto que el % de recargo)</span>
       </div>
 
+      <button type="button" class="btn btn-secondary mobile-only" onclick="document.getElementById('credito-cuotas-section').scrollIntoView({behavior:'smooth',block:'start'})" style="width:100%;justify-content:center"><i class="fa-solid fa-table-list"></i> Ver Listado de Cuotas</button>
+
       <div class="resp-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group"><label>N° Cuotas</label><input type="number" id="credito-cuotas" value="4" min="1" oninput="onNumCuotasInput()"></div>
         <div class="form-group">
@@ -1023,13 +1025,16 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="form-group"><label>Inicio</label><input type="date" id="credito-inicio" onchange="calcularPlanCredito()"></div>
       </div>
       
-      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-top:10px">
-        <table style="width:100%;font-size:11px;text-align:left;border-collapse:collapse">
-          <thead style="background:var(--surface2)">
-            <tr><th style="padding:6px;border-bottom:1px solid var(--border)">Cuota</th><th style="padding:6px;border-bottom:1px solid var(--border)">Fecha</th><th style="padding:6px;border-bottom:1px solid var(--border)">Valor</th></tr>
-          </thead>
-          <tbody id="credito-cuotas-body"></tbody>
-        </table>
+      <div id="credito-cuotas-section" style="scroll-margin-top:15px">
+        <h4 style="margin:4px 0 6px;color:var(--electric)"><i class="fa-solid fa-table-list"></i> Plan de Cuotas Simulado</h4>
+        <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+          <table style="width:100%;font-size:11px;text-align:left;border-collapse:collapse">
+            <thead style="background:var(--surface2)">
+              <tr><th style="padding:6px;border-bottom:1px solid var(--border)">Cuota</th><th style="padding:6px;border-bottom:1px solid var(--border)">Fecha</th><th style="padding:6px;border-bottom:1px solid var(--border)">Valor</th></tr>
+            </thead>
+            <tbody id="credito-cuotas-body"></tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
