@@ -144,6 +144,11 @@ tbody td{padding:5px 9px}
 .section-title i{color:var(--electric)}
 .toolbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .toolbar-right{margin-left:auto}
+.toolbar-group{margin-bottom:10px}
+.toolbar-group-label{display:block;font-size:10.5px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.toolbar-group-label i{color:var(--electric);margin-right:4px}
+.toolbar-row{display:flex;gap:7px}
+.toolbar-row .btn-compact{flex:1;justify-content:center;border:none}
 .import-notice{background:#FFF0F0;border:2px solid var(--red);border-radius:var(--radius-sm);padding:9px 12px;font-size:11.5px;color:#b71c1c;font-weight:600;display:flex;align-items:flex-start;gap:7px;margin-bottom:8px}
 .lbl-cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
@@ -330,7 +335,21 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   }
   .btn { padding: 10px 15px; justify-content: center; }
   .btn-xs, .btn-sm { min-height: 38px; }
-  
+
+  /* Compact grouped toolbar buttons (Catálogos / Exportar-Importar): stay in one row, shrink instead of wrap */
+  .toolbar-row .btn-compact {
+    flex-direction: column;
+    gap: 3px;
+    font-size: 9.5px !important;
+    padding: 7px 2px !important;
+    min-height: 52px !important;
+    line-height: 1.15;
+    white-space: normal;
+    text-align: center;
+  }
+  .toolbar-row .btn-compact i { font-size: 14px; }
+  .toolbar-row .btn-compact span { display: block; }
+
   /* CONFIG GRID */
   .config-grid, .stats-grid, .caja-summary, .lbl-cfg-grid, .prod-form-grid {
     grid-template-columns: 1fr;
@@ -632,12 +651,22 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <button class="btn btn-secondary" onclick="toggleSelectAll()"><i class="fa-solid fa-check-double"></i> Sel. Todos</button>
     <button class="btn btn-warning" onclick="printBarcodes()"><i class="fa-solid fa-barcode"></i> Códigos</button>
     <button class="btn btn-warning" onclick="openLabelsModal()"><i class="fa-solid fa-tag"></i> Etiquetas</button>
-    <button class="btn btn-success" onclick="generateCatalogPDF(true)" style="background:var(--electric);color:#fff"><i class="fa-solid fa-file-pdf"></i> Catálogo c/ Precio</button>
-    <button class="btn btn-success" onclick="generateCatalogPDF(false)" style="background:var(--electric-dark);color:#fff"><i class="fa-solid fa-file-pdf"></i> Catálogo s/ Precio</button>
-    <button class="btn" style="background: linear-gradient(135deg, #10b981, #3b82f6); color:#fff; border:none; border-radius: 6px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);" onclick="openSmartCommerceWizard()"><i class="fa-solid fa-store"></i> CATÁLOGO SMART COMMERCE</button>
-    <button class="btn btn-excel" onclick="exportExcel()"><i class="fa-solid fa-file-excel"></i> Exportar Inventario</button>
-    <label class="btn btn-success" style="cursor:pointer"><i class="fa-solid fa-file-import"></i> Importar CSV<input type="file" id="import-file" accept=".csv" style="display:none" onchange="importExcel(this)"></label>
     <div class="toolbar-right" style="font-size:11.5px;color:var(--text-mid)">Mostrando <strong id="prod-count">0</strong> / <strong id="prod-total-count">0</strong></div>
+  </div>
+  <div class="toolbar-group">
+    <span class="toolbar-group-label"><i class="fa-solid fa-file-pdf"></i> Catálogos</span>
+    <div class="toolbar-row toolbar-row-3">
+      <button class="btn btn-compact" style="background:var(--electric);color:#fff" onclick="generateCatalogPDF(true)"><i class="fa-solid fa-file-pdf"></i><span>Con Precio</span></button>
+      <button class="btn btn-compact" style="background:var(--electric-dark);color:#fff" onclick="generateCatalogPDF(false)"><i class="fa-solid fa-file-pdf"></i><span>Sin Precio</span></button>
+      <button class="btn btn-compact" style="background:linear-gradient(135deg,#10b981,#3b82f6);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.25)" onclick="openSmartCommerceWizard()"><i class="fa-solid fa-store"></i><span>Smart Commerce</span></button>
+    </div>
+  </div>
+  <div class="toolbar-group">
+    <span class="toolbar-group-label"><i class="fa-solid fa-file-csv"></i> Datos del inventario</span>
+    <div class="toolbar-row toolbar-row-2">
+      <button class="btn btn-compact btn-excel" onclick="exportExcel()"><i class="fa-solid fa-file-excel"></i><span>Exportar Inventario</span></button>
+      <label class="btn btn-compact btn-success" style="cursor:pointer"><i class="fa-solid fa-file-import"></i><span>Importar CSV</span><input type="file" id="import-file" accept=".csv" style="display:none" onchange="importExcel(this)"></label>
+    </div>
   </div>
   <div class="import-notice">
     <i class="fa-solid fa-triangle-exclamation"></i>
