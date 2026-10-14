@@ -417,10 +417,23 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .cartera-card.total .c-icon { background: var(--electric-pale); color: var(--electric-dark); }
 .cartera-card.abonos .c-icon { background: #e6f9f0; color: var(--green-dark); }
 .cartera-card.saldo .c-icon { background: var(--red-pale); color: var(--red); }
-.cartera-card .c-info { flex: 1; }
+.cartera-card .c-info { flex: 1; min-width: 0; }
 .cartera-card .c-info h4 { font-size: 11px; text-transform: uppercase; color: var(--text-mid); margin-bottom: 4px; font-weight: 700; letter-spacing: 0.5px; }
 .cartera-card .c-info .c-val { font-size: 22px; font-weight: 800; color: var(--text); }
 .cartera-card.total .c-info .c-val { color: var(--electric-dark); }
+.cartera-card.abonos { align-items: flex-start; }
+.cartera-card.abonos .c-icon { margin-top: 2px; }
+.c-breakdown { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; border-top: 1px dashed var(--border); padding-top: 7px; }
+.c-breakdown-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+.c-breakdown-row .bd-metodo { color: var(--text-mid); display: flex; align-items: center; gap: 5px; }
+.c-breakdown-row .bd-metodo::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.c-breakdown-row .bd-monto { font-weight: 700; color: var(--green-dark); white-space: nowrap; }
+.c-breakdown-empty { font-size: 10.5px; color: var(--text-light); margin-top: 6px; }
+.c-breakdown-row:nth-child(1) .bd-metodo::before { background: var(--green); }
+.c-breakdown-row:nth-child(2) .bd-metodo::before { background: var(--electric); }
+.c-breakdown-row:nth-child(3) .bd-metodo::before { background: var(--yellow); }
+.c-breakdown-row:nth-child(4) .bd-metodo::before { background: #8b5cf6; }
+.c-breakdown-row:nth-child(5) .bd-metodo::before { background: var(--red); }
 
 /* Filtros de Cartera */
 .cartera-filters-bar { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; background: var(--surface); padding: 10px 15px; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 2px 5px rgba(0,0,0,0.02); flex-wrap: wrap; justify-content: space-between; }
@@ -767,6 +780,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="c-info">
           <h4>Total Recaudado</h4>
           <div class="c-val" id="cartera-sum-abonos">$0.00</div>
+          <div class="c-breakdown" id="cartera-abonos-breakdown"></div>
         </div>
       </div>
       <div class="cartera-card saldo">
@@ -3363,9 +3377,33 @@ async function loadCartera() {
     if(elTotal) elTotal.innerText = fmt(sumTotal);
     if(elAbonos) elAbonos.innerText = fmt(sumAbonos);
     if(elSaldo) elSaldo.innerText = fmt(sumSaldo);
-    
+
+    loadCarteraAbonosBreakdown(clienteId, estado);
+
   } catch(e) {
     toast('Error cargando cartera: ' + e.message, 'error');
+  }
+}
+
+// Mini-desglose del Total Recaudado por método de pago (Efectivo, Transferencia, etc.),
+// respetando los mismos filtros de cliente/estado activos en Cartera.
+async function loadCarteraAbonosBreakdown(clienteId, estado) {
+  var cont = document.getElementById('cartera-abonos-breakdown');
+  if (!cont) return;
+  try {
+    var qs = [];
+    if (clienteId) qs.push('cliente_id=' + encodeURIComponent(clienteId));
+    if (estado) qs.push('estado=' + encodeURIComponent(estado));
+    var datos = await apiGet('/creditos/resumen-metodos' + (qs.length ? '?' + qs.join('&') : ''));
+    if (!datos || !datos.length) {
+      cont.innerHTML = '<div class="c-breakdown-empty"><i class="fa-regular fa-circle"></i> Sin abonos registrados</div>';
+      return;
+    }
+    cont.innerHTML = datos.map(function(d) {
+      return '<div class="c-breakdown-row"><span class="bd-metodo">' + (d.metodo || 'Otro') + '</span><span class="bd-monto">' + fmt(d.total) + '</span></div>';
+    }).join('');
+  } catch (e) {
+    cont.innerHTML = '';
   }
 }
 

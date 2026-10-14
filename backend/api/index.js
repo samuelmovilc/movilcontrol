@@ -584,6 +584,25 @@ app.get('/api/creditos', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Recaudo total discriminado por método de pago, respetando los mismos filtros
+// (cliente_id/estado) que la lista principal de cartera. Debe ir ANTES de
+// GET /api/creditos/:id para que "resumen-metodos" no se capture como :id.
+app.get('/api/creditos/resumen-metodos', tenantAuth, async (req, res) => {
+  try {
+    const { cliente_id, estado } = req.query;
+    let sql = `SELECT COALESCE(NULLIF(TRIM(m.metodo_pago),''),'Otro') AS metodo, SUM(m.monto) AS total
+               FROM movimientos_caja m
+               JOIN creditos c ON c.id = m.credito_id
+               WHERE m.tipo='ingreso' AND m.credito_id IS NOT NULL`;
+    const params = [];
+    if (cliente_id) { sql += ' AND c.cliente_id=?'; params.push(cliente_id); }
+    if (estado) { sql += ' AND c.estado=?'; params.push(estado); }
+    sql += ' GROUP BY metodo ORDER BY total DESC';
+    const [rows] = await req.tenantPool.query(sql, params);
+    res.json(rows.map(r => ({ metodo: r.metodo, total: parseFloat(r.total) || 0 })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/creditos/:id', tenantAuth, async (req, res) => {
   try {
     const [creditos] = await req.tenantPool.query('SELECT c.*, cl.nombre as cliente_nombre FROM creditos c JOIN clientes cl ON c.cliente_id = cl.id WHERE c.id=?', [req.params.id]);
