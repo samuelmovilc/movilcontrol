@@ -981,7 +981,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div id="cotizador-search-results" class="search-results-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:4px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 5px 15px rgba(0,0,0,0.1)"></div>
       </div>
       
-      <div id="cotizador-productos-lista" style="display:flex;flex-direction:column;gap:5px;max-height:100px;overflow-y:auto;margin-bottom:5px;border:1px solid var(--border);border-radius:4px;padding:5px;background:var(--bg)">
+      <div id="cotizador-productos-lista" style="display:flex;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;overflow-x:hidden;margin-bottom:5px;border:1px solid var(--border);border-radius:4px;padding:5px;background:var(--bg)">
         <div style="text-align:center;color:var(--text-light);font-size:12px;padding:10px">No hay productos agregados.</div>
       </div>
       
@@ -3032,14 +3032,15 @@ function renderCotizadorProductos() {
   cotizadorProductos.forEach(function(p, idx) {
     var subtotal = p.precio * p.cantidad;
     totalContado += subtotal;
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;background:#fff;padding:5px;border:1px solid var(--border);border-radius:4px">';
-    html += '<div style="flex:1;font-size:11px"><b>'+p.nombre+'</b><br>';
-    html += '<input type="number" value="'+p.precio+'" min="0" step="any" title="Precio solo para esta cotización (no cambia el catálogo)" style="width:75px;padding:2px;font-size:11px;border:1px solid var(--border);border-radius:3px;text-align:right" onchange="updateCotizadorProdPrecio('+idx+', this.value)">';
-    html += ' <span style="color:var(--text-light)"> x </span>';
-    html += '<input type="number" value="'+p.cantidad+'" min="1" max="'+p.stock+'" style="width:45px;padding:2px;font-size:11px;border:1px solid var(--border);border-radius:3px;text-align:center" onchange="updateCotizadorProdQty('+idx+', this.value, '+p.stock+')">';
+    html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:#fff;padding:6px 8px;border:1px solid var(--border);border-radius:4px">';
+    html += '<div style="flex:1 1 100%;font-size:11.5px;font-weight:bold">'+p.nombre+'</div>';
+    html += '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">';
+    html += '<input type="number" value="'+p.precio+'" min="0" step="any" title="Precio solo para esta cotización (no cambia el catálogo)" style="width:80px;padding:4px;font-size:12px;border:1px solid var(--border);border-radius:3px;text-align:right" onchange="updateCotizadorProdPrecio('+idx+', this.value)">';
+    html += '<span style="color:var(--text-light)">x</span>';
+    html += '<input type="number" value="'+p.cantidad+'" min="1" max="'+p.stock+'" style="width:50px;padding:4px;font-size:12px;border:1px solid var(--border);border-radius:3px;text-align:center" onchange="updateCotizadorProdQty('+idx+', this.value, '+p.stock+')">';
     html += '</div>';
-    html += '<div style="font-weight:bold;margin-right:10px">'+fmt(subtotal)+'</div>';
-    html += '<button class="btn btn-secondary btn-xs" style="color:var(--red);padding:2px 5px" onclick="removeCotizadorProd('+idx+')"><i class="fa-solid fa-trash"></i></button>';
+    html += '<div style="font-weight:bold;margin-left:auto;white-space:nowrap">'+fmt(subtotal)+'</div>';
+    html += '<button class="btn btn-secondary btn-xs" style="color:var(--red);padding:4px 7px;flex-shrink:0" onclick="removeCotizadorProd('+idx+')"><i class="fa-solid fa-trash"></i></button>';
     html += '</div>';
   });
   div.innerHTML = html;
