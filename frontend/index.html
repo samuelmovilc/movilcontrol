@@ -420,6 +420,37 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .abono-row .abono-actions { display: flex; gap: 6px; }
 .abono-empty { color: var(--text-light); font-size: 12px; text-align: center; padding: 10px; }
 
+/* Gestión de Clientes */
+.clientes-form-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.clientes-form-card h4 { display: flex; align-items: center; gap: 6px; color: var(--electric-dark); font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 12px; }
+.clientes-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.clientes-form-actions { display: flex; gap: 8px; margin-top: 12px; }
+.clientes-form-actions .btn-primary { flex: 1; justify-content: center; }
+.clientes-list-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.clientes-list-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.clientes-count { flex-shrink: 0; background: var(--electric-pale); color: var(--electric-dark); font-size: 10.5px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.clientes-tbl-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; }
+.clientes-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.clientes-table thead th { position: sticky; top: 0; z-index: 2; background: var(--electric-pale); color: var(--electric-dark); font-weight: 700; padding: 8px 10px; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 2px solid var(--border-strong); border-right: 1px solid var(--border); }
+.clientes-table thead th:last-child { border-right: none; }
+.clientes-table tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle; }
+.clientes-table tbody td:last-child { border-right: none; }
+.clientes-table tbody tr:nth-child(even) { background: var(--surface2); }
+.clientes-table tbody tr:hover { background: var(--electric-pale); }
+.clientes-table td.col-id { font-weight: 700; color: var(--electric-dark); white-space: nowrap; }
+.clientes-table td.col-acc, .clientes-table th.col-acc { text-align: right; white-space: nowrap; width: 1%; }
+.clientes-table-empty { text-align: center; color: var(--text-light); padding: 24px 10px; font-size: 12px; }
+@media(max-width:900px){
+  .clientes-form-grid { grid-template-columns: 1fr 1fr; }
+  .clientes-table thead th, .clientes-table tbody td { padding: 7px 6px; font-size: 10.5px; }
+  .clientes-table thead th { font-size: 9px; }
+  .clientes-list-head { flex-wrap: wrap; }
+  .clientes-count { order: -1; }
+}
+@media(max-width:480px){
+  .clientes-form-grid { grid-template-columns: 1fr; }
+}
+
 @media(max-width:900px){
   .cartera-summary-grid { grid-template-columns: 1fr !important; }
   .cartera-btn-group { flex-wrap: wrap; }
@@ -925,34 +956,37 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   </div>
 </div>
 <div class="modal-overlay" id="modal-clientes">
-  <div class="modal" style="max-width:700px">
+  <div class="modal" style="max-width:920px">
     <div class="modal-header"><span><i class="fa-solid fa-users-gear"></i> Gestión de Clientes</span><button class="modal-close" onclick="closeModal('modal-clientes')"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:15px">
-      <div style="display:grid;grid-template-columns:1fr 250px;gap:15px;align-items:start" class="clientes-layout">
-        <!-- Formulario -->
-        <div style="background:var(--surface2);padding:12px;border-radius:var(--radius);border:1px solid var(--border)">
-          <h4 style="margin-bottom:10px;color:var(--electric);font-size:12px"><i class="fa-solid fa-user-plus"></i> <span id="form-cliente-title">Nuevo Cliente</span></h4>
-          <input type="hidden" id="cli-original-id">
-          <div class="form-group" style="margin-bottom:8px"><label>Cédula/NIT *</label><input type="text" id="cli-id" placeholder="Ej: 123456789"></div>
-          <div class="form-group" style="margin-bottom:8px"><label>Nombre *</label><input type="text" id="cli-nombre" placeholder="Nombre completo"></div>
-          <div class="form-group" style="margin-bottom:8px"><label>Teléfono</label><input type="text" id="cli-telefono" placeholder="Opcional"></div>
-          <div class="form-group" style="margin-bottom:12px"><label>Dirección</label><input type="text" id="cli-direccion" placeholder="Opcional"></div>
-          <div style="display:flex;gap:5px">
-            <button class="btn btn-primary" onclick="saveCliente()" style="flex:1"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
-            <button class="btn btn-secondary" onclick="resetClienteForm()"><i class="fa-solid fa-eraser"></i></button>
-          </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+      <!-- Formulario -->
+      <div class="clientes-form-card">
+        <h4><i class="fa-solid fa-user-plus"></i> <span id="form-cliente-title">Nuevo Cliente</span></h4>
+        <input type="hidden" id="cli-original-id">
+        <div class="clientes-form-grid">
+          <div class="form-group"><label>Cédula/NIT *</label><input type="text" id="cli-id" placeholder="Ej: 123456789"></div>
+          <div class="form-group"><label>Nombre *</label><input type="text" id="cli-nombre" placeholder="Nombre completo"></div>
+          <div class="form-group"><label>Teléfono</label><input type="text" id="cli-telefono" placeholder="Opcional"></div>
+          <div class="form-group"><label>Dirección</label><input type="text" id="cli-direccion" placeholder="Opcional"></div>
         </div>
-        <!-- Lista -->
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div class="search-bar" style="padding:0;border:none;background:transparent">
-            <input type="text" id="search-cliente" placeholder="🔍 Buscar cliente..." oninput="loadClientesLista()" style="width:100%">
+        <div class="clientes-form-actions">
+          <button class="btn btn-primary" onclick="saveCliente()"><i class="fa-solid fa-floppy-disk"></i> Guardar Cliente</button>
+          <button class="btn btn-secondary" onclick="resetClienteForm()"><i class="fa-solid fa-eraser"></i> Limpiar</button>
+        </div>
+      </div>
+      <!-- Lista -->
+      <div class="clientes-list-card">
+        <div class="clientes-list-head">
+          <div class="search-bar" style="padding:0;border:none;background:transparent;flex:1">
+            <input type="text" id="search-cliente" placeholder="🔍 Buscar por cédula o nombre..." oninput="loadClientesLista()" style="width:100%">
           </div>
-          <div class="tbl-wrap" style="max-height:300px;border:1px solid var(--border);border-radius:var(--radius-sm)">
-            <table style="font-size:11px">
-              <thead><tr><th>Cédula/NIT</th><th>Nombre</th><th>Teléfono</th><th></th></tr></thead>
-              <tbody id="clientes-body"></tbody>
-            </table>
-          </div>
+          <span class="clientes-count" id="clientes-count">0 clientes</span>
+        </div>
+        <div class="clientes-tbl-wrap">
+          <table class="clientes-table">
+            <thead><tr><th>Cédula/NIT</th><th>Nombre</th><th>Teléfono</th><th class="col-acc"></th></tr></thead>
+            <tbody id="clientes-body"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -2813,13 +2847,19 @@ async function loadClientesLista() {
   var qs = busqueda ? '?busqueda=' + encodeURIComponent(busqueda) : '';
   try {
     var clientes = await apiGet('/clientes' + qs);
+    var countEl = document.getElementById('clientes-count');
+    if (countEl) countEl.textContent = clientes.length + (clientes.length === 1 ? ' cliente' : ' clientes');
+    if (!clientes.length) {
+      document.getElementById('clientes-body').innerHTML = '<tr><td colspan="4" class="clientes-table-empty"><i class="fa-solid fa-users-slash"></i> ' + (busqueda ? 'Sin resultados para "' + busqueda + '"' : 'Aún no hay clientes registrados') + '</td></tr>';
+      return;
+    }
     var html = '';
     clientes.forEach(function(c) {
       html += '<tr>' +
-        '<td><b>' + c.id + '</b></td>' +
+        '<td class="col-id">' + c.id + '</td>' +
         '<td>' + c.nombre + '</td>' +
-        '<td>' + (c.telefono || '') + '</td>' +
-        '<td style="text-align:right">' +
+        '<td>' + (c.telefono || '—') + '</td>' +
+        '<td class="col-acc">' +
           '<button class="btn btn-secondary btn-xs" style="padding:2px 6px;margin-right:4px" onclick="editCliente(\'' + c.id + '\', \'' + (c.nombre||'').replace(/'/g,"\\'") + '\', \'' + (c.telefono||'') + '\', \'' + (c.direccion||'').replace(/'/g,"\\'") + '\')"><i class="fa-solid fa-pen"></i></button>' +
           (c.id !== '222222' ? '<button class="btn btn-danger btn-xs" style="padding:2px 6px" onclick="deleteCliente(\'' + c.id + '\')"><i class="fa-solid fa-trash"></i></button>' : '') +
         '</td>' +
