@@ -426,14 +426,14 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .c-breakdown { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; border-top: 1px dashed var(--border); padding-top: 7px; }
 .c-breakdown-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
 .c-breakdown-row .bd-metodo { color: var(--text-mid); display: flex; align-items: center; gap: 5px; }
-.c-breakdown-row .bd-metodo::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.c-breakdown-row .bd-metodo::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--dot-color, var(--green)); flex-shrink: 0; }
 .c-breakdown-row .bd-monto { font-weight: 700; color: var(--green-dark); white-space: nowrap; }
 .c-breakdown-empty { font-size: 10.5px; color: var(--text-light); margin-top: 6px; }
-.c-breakdown-row:nth-child(1) .bd-metodo::before { background: var(--green); }
-.c-breakdown-row:nth-child(2) .bd-metodo::before { background: var(--electric); }
-.c-breakdown-row:nth-child(3) .bd-metodo::before { background: var(--yellow); }
-.c-breakdown-row:nth-child(4) .bd-metodo::before { background: #8b5cf6; }
-.c-breakdown-row:nth-child(5) .bd-metodo::before { background: var(--red); }
+.c-breakdown-row:nth-child(1) .bd-metodo { --dot-color: var(--green); }
+.c-breakdown-row:nth-child(2) .bd-metodo { --dot-color: var(--electric); }
+.c-breakdown-row:nth-child(3) .bd-metodo { --dot-color: var(--yellow); }
+.c-breakdown-row:nth-child(4) .bd-metodo { --dot-color: #8b5cf6; }
+.c-breakdown-row:nth-child(5) .bd-metodo { --dot-color: var(--red); }
 
 /* Filtros de Cartera */
 .cartera-filters-bar { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; background: var(--surface); padding: 10px 15px; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 2px 5px rgba(0,0,0,0.02); flex-wrap: wrap; justify-content: space-between; }
@@ -3378,7 +3378,7 @@ async function loadCartera() {
     if(elAbonos) elAbonos.innerText = fmt(sumAbonos);
     if(elSaldo) elSaldo.innerText = fmt(sumSaldo);
 
-    loadCarteraAbonosBreakdown(clienteId, estado);
+    loadCarteraAbonosBreakdown(clienteId, estado, sumAbonos);
 
   } catch(e) {
     toast('Error cargando cartera: ' + e.message, 'error');
@@ -3386,8 +3386,10 @@ async function loadCartera() {
 }
 
 // Mini-desglose del Total Recaudado por método de pago (Efectivo, Transferencia, etc.),
-// respetando los mismos filtros de cliente/estado activos en Cartera.
-async function loadCarteraAbonosBreakdown(clienteId, estado) {
+// respetando los mismos filtros de cliente/estado activos en Cartera. Si algún crédito
+// tiene abonado/inicial sin un movimiento de caja asociado (datos antiguos/huérfanos),
+// se agrega una línea "Sin método registrado" para que el desglose siempre sume el total.
+async function loadCarteraAbonosBreakdown(clienteId, estado, totalRecaudado) {
   var cont = document.getElementById('cartera-abonos-breakdown');
   if (!cont) return;
   try {
@@ -3395,12 +3397,20 @@ async function loadCarteraAbonosBreakdown(clienteId, estado) {
     if (clienteId) qs.push('cliente_id=' + encodeURIComponent(clienteId));
     if (estado) qs.push('estado=' + encodeURIComponent(estado));
     var datos = await apiGet('/creditos/resumen-metodos' + (qs.length ? '?' + qs.join('&') : ''));
-    if (!datos || !datos.length) {
+    datos = datos || [];
+    var sumDiscriminado = datos.reduce(function(s, d) { return s + (parseFloat(d.total) || 0); }, 0);
+    var diferencia = (parseFloat(totalRecaudado) || 0) - sumDiscriminado;
+    if (diferencia > 0.5) {
+      datos = datos.concat([{ metodo: 'Sin método registrado', total: diferencia }]);
+    }
+    if (!datos.length) {
       cont.innerHTML = '<div class="c-breakdown-empty"><i class="fa-regular fa-circle"></i> Sin abonos registrados</div>';
       return;
     }
     cont.innerHTML = datos.map(function(d) {
-      return '<div class="c-breakdown-row"><span class="bd-metodo">' + (d.metodo || 'Otro') + '</span><span class="bd-monto">' + fmt(d.total) + '</span></div>';
+      var esSinRegistro = d.metodo === 'Sin método registrado';
+      var dotStyle = esSinRegistro ? ' style="--dot-color:var(--text-light)"' : '';
+      return '<div class="c-breakdown-row"' + (esSinRegistro ? ' style="opacity:.75"' : '') + '><span class="bd-metodo"' + dotStyle + '>' + (d.metodo || 'Otro') + '</span><span class="bd-monto">' + fmt(d.total) + '</span></div>';
     }).join('');
   } catch (e) {
     cont.innerHTML = '';
