@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 
 <style>
 :root{
@@ -514,6 +515,39 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .saas-login-card input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; }
 .saas-login-btn { width: 100%; padding: 12px; font-size: 16px; background: var(--electric); color: white; border: none; border-radius: 4px; cursor: pointer; }
 .saas-login-btn:hover { background: var(--electric-dark); }
+
+/* ── CAMERA BARCODE SCANNER (mobile only) ── */
+#barcode-cam-overlay {
+  position: fixed; inset: 0; background: #000; z-index: 10500;
+  display: flex; flex-direction: column;
+}
+#barcode-cam-overlay video {
+  flex: 1; width: 100%; height: 100%; object-fit: cover; background: #000;
+}
+.barcode-cam-topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 14px calc(14px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(to bottom, rgba(0,0,0,.65), transparent);
+}
+.barcode-cam-topbar span { color: #fff; font-weight: 600; font-size: 14px; }
+.barcode-cam-close {
+  background: rgba(255,255,255,.18); border: none; color: #fff;
+  width: 38px; height: 38px; border-radius: 50%; font-size: 16px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.barcode-cam-viewfinder {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 78%; max-width: 340px; height: 120px;
+  border: 3px solid var(--electric, #2563eb); border-radius: 12px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.45);
+  pointer-events: none;
+}
+.barcode-cam-hint {
+  position: absolute; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0;
+  text-align: center; color: #fff; font-size: 13px; padding: 0 20px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
 </style>
 
 </head>
@@ -565,6 +599,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="search-bar">
           <input type="text" id="pos-search" placeholder="🔍 Buscar nombre..." oninput="filterPosProducts()">
           <input type="text" id="barcode-input" placeholder="📷 Código barras" oninput="handleBarcodeScan(this.value)" style="width:148px">
+          <button type="button" class="btn btn-secondary mobile-only" style="padding:0 12px" onclick="openBarcodeCameraScanner('barcode-input')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
         </div>
         <div class="tbl-wrap">
           <table><thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Stock</th></tr></thead>
@@ -1075,6 +1110,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div style="display:flex;gap:5px;">
           <input type="text" id="cotizador-search-prod" placeholder="Escribe nombre o código..." autocomplete="off" style="flex:1" oninput="filterCotizadorProducts(this.value)">
           <input type="text" id="cotizador-barcode" placeholder="Código barras" autocomplete="off" style="width:120px" oninput="handleCotizadorBarcode(this.value)">
+          <button type="button" class="btn btn-secondary mobile-only" style="padding:0 12px" onclick="openBarcodeCameraScanner('cotizador-barcode')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
         </div>
         <div id="cotizador-search-results" class="search-results-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:4px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 5px 15px rgba(0,0,0,0.1)"></div>
       </div>
@@ -1309,7 +1345,7 @@ function toast(msg,type,ms){
   setTimeout(function(){el.classList.add('hiding');setTimeout(function(){el.remove()},300)},ms);
 }
 function openModal(id){document.getElementById(id).classList.add('open')}
-function closeModal(id){document.getElementById(id).classList.remove('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open');if(document.getElementById('barcode-cam-overlay')&&document.getElementById('barcode-cam-overlay').style.display==='flex')closeBarcodeCameraScanner()}
 function confirmDlg(title,msg,cb){
   document.getElementById('confirm-title').textContent=title;
   document.getElementById('confirm-msg').textContent=msg;
@@ -1323,6 +1359,7 @@ var todayStr=function(){return localDateStr()};
 
 /* ═══ NAV ═══ */
 function showModule(n){
+  if(document.getElementById('barcode-cam-overlay')&&document.getElementById('barcode-cam-overlay').style.display==='flex')closeBarcodeCameraScanner();
   document.querySelectorAll('.module').forEach(function(m){m.classList.remove('active')});
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
   document.getElementById('module-'+n).classList.add('active');
@@ -1372,6 +1409,59 @@ function handleBarcodeScan(val){
       document.getElementById('barcode-input').value='';
     }
   },220);
+}
+
+// ── CAMERA BARCODE SCANNER (mobile only; desktop keeps the physical-scanner text inputs) ──
+var barcodeCamReader = null;
+var barcodeCamTargetId = null;
+var barcodeCamBusy = false;
+
+function openBarcodeCameraScanner(targetInputId){
+  if(typeof ZXing === 'undefined'){
+    toast('No se pudo cargar el escáner de cámara','error');
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast('Tu navegador no soporta acceso a la cámara','error');
+    return;
+  }
+  barcodeCamTargetId = targetInputId;
+  barcodeCamBusy = false;
+  document.getElementById('barcode-cam-overlay').style.display = 'flex';
+
+  if(!barcodeCamReader){
+    barcodeCamReader = new ZXing.BrowserMultiFormatReader();
+  }
+
+  var video = document.getElementById('barcode-cam-video');
+  barcodeCamReader.decodeFromConstraints(
+    { video: { facingMode: 'environment' } },
+    video,
+    function(result, err){
+      if(barcodeCamBusy || !result) return;
+      barcodeCamBusy = true;
+      var code = result.getText();
+      if(navigator.vibrate) navigator.vibrate(80);
+      closeBarcodeCameraScanner();
+      var input = document.getElementById(barcodeCamTargetId);
+      if(input){
+        input.value = code;
+        if(barcodeCamTargetId === 'cotizador-barcode') handleCotizadorBarcode(code);
+        else handleBarcodeScan(code);
+      }
+    }
+  ).catch(function(e){
+    toast('No se pudo acceder a la cámara','error');
+    closeBarcodeCameraScanner();
+  });
+}
+
+function closeBarcodeCameraScanner(){
+  document.getElementById('barcode-cam-overlay').style.display = 'none';
+  if(barcodeCamReader){
+    try{ barcodeCamReader.reset(); }catch(e){}
+  }
+  barcodeCamTargetId = null;
 }
 
 function addToCart(id){
@@ -4434,6 +4524,16 @@ function checkoutSmartCart() {
   window.open('https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg), '_blank');
 }
 </script>
+
+<div id="barcode-cam-overlay" style="display:none">
+  <video id="barcode-cam-video" muted playsinline autoplay></video>
+  <div class="barcode-cam-topbar">
+    <span><i class="fa-solid fa-camera"></i> Escanear código de barras</span>
+    <button type="button" class="barcode-cam-close" onclick="closeBarcodeCameraScanner()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="barcode-cam-viewfinder"></div>
+  <div class="barcode-cam-hint">Centra el código de barras dentro del recuadro</div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 </body>
