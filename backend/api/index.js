@@ -586,16 +586,36 @@ app.get('/api/creditos', tenantAuth, async (req, res) => {
     if (estado) { sql += ' AND c.estado=?'; params.push(estado); }
     sql += ' ORDER BY c.created_at DESC';
     const [creditos] = await req.tenantPool.query(sql, params);
-    
+
+    // Parsear los productos cotizados de cada crédito y recolectar sus ids para traer
+    // el costo (precio_compra) actual del catálogo en una sola consulta.
+    const idsCosto = new Set();
+    for (const cred of creditos) {
+      try { cred.productos = cred.productos_cotizados ? JSON.parse(cred.productos_cotizados) : []; } catch(e) { cred.productos = []; }
+      cred.productos.forEach(p => { if (p && p.id != null) idsCosto.add(String(p.id)); });
+    }
+    let costoMap = {};
+    if (idsCosto.size) {
+      const [prodsCosto] = await req.tenantPool.query('SELECT id, precio_compra FROM productos WHERE id IN (?)', [[...idsCosto]]);
+      prodsCosto.forEach(p => { costoMap[String(p.id)] = parseFloat(p.precio_compra) || 0; });
+    }
+
     // Cargar cuotas para cada crédito
     for (const cred of creditos) {
       const [cuotas] = await req.tenantPool.query('SELECT * FROM credito_cuotas WHERE credito_id=? ORDER BY numero_cuota ASC', [cred.id]);
       cred.cuotas = cuotas;
-      
+
       // Calcular totales
       cred.total_pagado = cuotas.reduce((sum, c) => sum + parseFloat(c.pagado||0), 0) + parseFloat(cred.inicial||0);
       cred.saldo_pendiente = parseFloat(cred.total_credito) - cred.total_pagado;
-      try { cred.productos = cred.productos_cotizados ? JSON.parse(cred.productos_cotizados) : []; } catch(e) { cred.productos = []; }
+
+      // Costo de los productos del crédito (según precio de compra actual del catálogo) y
+      // ganancia: la "esperada" es el margen total si se cubre todo el crédito; la
+      // "realizada" es la porción de lo ya abonado que, en orden, supera ese costo (se
+      // asume que los primeros pesos abonados cubren el costo antes de ser utilidad real).
+      cred.costo_total = cred.productos.reduce((sum, p) => sum + (costoMap[String(p.id)] || 0) * (parseInt(p.cantidad) || 0), 0);
+      cred.ganancia_esperada = parseFloat(cred.total_credito) - cred.costo_total;
+      cred.ganancia_realizada = Math.max(0, Math.min(cred.total_pagado, parseFloat(cred.total_credito)) - cred.costo_total);
     }
     res.json(creditos);
   } catch(e) { res.status(500).json({ error: e.message }); }

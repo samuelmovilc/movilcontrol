@@ -413,14 +413,21 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .cartera-card.total::before { background: var(--electric); }
 .cartera-card.abonos::before { background: var(--green); }
 .cartera-card.saldo::before { background: var(--red); }
+.cartera-card.ganancia-esp::before { background: #8b5cf6; }
+.cartera-card.ganancia-real::before { background: #0d9488; }
 .cartera-card .c-icon { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
 .cartera-card.total .c-icon { background: var(--electric-pale); color: var(--electric-dark); }
 .cartera-card.abonos .c-icon { background: #e6f9f0; color: var(--green-dark); }
 .cartera-card.saldo .c-icon { background: var(--red-pale); color: var(--red); }
+.cartera-card.ganancia-esp .c-icon { background: #ede9fe; color: #7c3aed; }
+.cartera-card.ganancia-real .c-icon { background: #ccfbf1; color: #0d9488; }
 .cartera-card .c-info { flex: 1; min-width: 0; }
 .cartera-card .c-info h4 { font-size: 11px; text-transform: uppercase; color: var(--text-mid); margin-bottom: 4px; font-weight: 700; letter-spacing: 0.5px; }
 .cartera-card .c-info .c-val { font-size: 22px; font-weight: 800; color: var(--text); }
 .cartera-card.total .c-info .c-val { color: var(--electric-dark); }
+.cartera-card.ganancia-esp .c-info .c-val { color: #7c3aed; }
+.cartera-card.ganancia-real .c-info .c-val { color: #0d9488; }
+.cartera-card .c-subtext { font-size: 10px; color: var(--text-light); margin-top: 3px; line-height: 1.3; }
 .cartera-card.abonos { align-items: flex-start; }
 .cartera-card.abonos .c-icon { margin-top: 2px; }
 .c-breakdown { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; border-top: 1px dashed var(--border); padding-top: 7px; }
@@ -761,9 +768,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 
 <!-- ═══ CARTERA MODULE ═══ -->
 <main class="module" id="module-cartera">
-<div class="top-bar">
-  <h2><i class="fa-solid fa-wallet"></i> Gestión de Cartera y Créditos</h2>
-</div>
+<h2 class="section-title"><i class="fa-solid fa-wallet"></i> Gestión de Cartera y Créditos</h2>
 <div class="grid-layout">
   <div class="card" style="grid-column:1/-1">
     <!-- TARJETAS DE RESUMEN -->
@@ -788,6 +793,22 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="c-info">
           <h4>Total Pendiente</h4>
           <div class="c-val" id="cartera-sum-saldo">$0.00</div>
+        </div>
+      </div>
+      <div class="cartera-card ganancia-esp">
+        <div class="c-icon"><i class="fa-solid fa-chart-line"></i></div>
+        <div class="c-info">
+          <h4>Ganancia Esperada</h4>
+          <div class="c-val" id="cartera-sum-ganancia-esperada">$0.00</div>
+          <div class="c-subtext">Al cubrirse todos los créditos activos</div>
+        </div>
+      </div>
+      <div class="cartera-card ganancia-real">
+        <div class="c-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+        <div class="c-info">
+          <h4>Ganancia Realizada</h4>
+          <div class="c-val" id="cartera-sum-ganancia-realizada">$0.00</div>
+          <div class="c-subtext">Ya cubierto el costo, de lo abonado</div>
         </div>
       </div>
     </div>
@@ -3373,10 +3394,23 @@ async function loadCartera() {
     var elTotal = document.getElementById('cartera-sum-total');
     var elAbonos = document.getElementById('cartera-sum-abonos');
     var elSaldo = document.getElementById('cartera-sum-saldo');
-    
+
     if(elTotal) elTotal.innerText = fmt(sumTotal);
     if(elAbonos) elAbonos.innerText = fmt(sumAbonos);
     if(elSaldo) elSaldo.innerText = fmt(sumSaldo);
+
+    // Ganancias: siempre sobre créditos ACTIVOS (independiente de la pestaña de estado
+    // seleccionada), respetando solo el filtro de cliente si hay uno aplicado.
+    var creditosActivos = carteraAllCreditos.filter(function(c) { return c.estado === 'activo'; });
+    if (clienteId) {
+      creditosActivos = creditosActivos.filter(function(c) { return String(c.cliente_id) === clienteId; });
+    }
+    var sumGananciaEsperada = creditosActivos.reduce(function(s, c) { return s + (parseFloat(c.ganancia_esperada) || 0); }, 0);
+    var sumGananciaRealizada = creditosActivos.reduce(function(s, c) { return s + (parseFloat(c.ganancia_realizada) || 0); }, 0);
+    var elGananciaEsp = document.getElementById('cartera-sum-ganancia-esperada');
+    var elGananciaReal = document.getElementById('cartera-sum-ganancia-realizada');
+    if (elGananciaEsp) elGananciaEsp.innerText = fmt(sumGananciaEsperada);
+    if (elGananciaReal) elGananciaReal.innerText = fmt(sumGananciaRealizada);
 
     loadCarteraAbonosBreakdown(clienteId, estado, sumAbonos);
 
