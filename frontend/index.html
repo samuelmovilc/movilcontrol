@@ -233,7 +233,15 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     height: auto;
   }
   .pos-left { width: 100%; flex: none; }
-  
+  .search-bar { flex-wrap: wrap; }
+  .search-bar #pos-search { flex: 1 1 100%; }
+  .search-bar #barcode-input { flex: 1 1 auto; width: auto; min-width: 0; }
+  .search-bar .barcode-cam-btn,
+  .cotizador-search-row .barcode-cam-btn { flex: 0 0 44px; width: 44px; }
+  .cotizador-search-row { flex-wrap: wrap; }
+  .cotizador-search-row #cotizador-search-prod { flex: 1 1 100%; }
+  .cotizador-search-row #cotizador-barcode { flex: 1 1 auto; width: auto; min-width: 0; }
+
   /* Hide right panel by default in mobile, turn into Bottom Sheet */
   .pos-right {
     position: fixed;
@@ -599,7 +607,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="search-bar">
           <input type="text" id="pos-search" placeholder="🔍 Buscar nombre..." oninput="filterPosProducts()">
           <input type="text" id="barcode-input" placeholder="📷 Código barras" oninput="handleBarcodeScan(this.value)" style="width:148px">
-          <button type="button" class="btn btn-secondary mobile-only" style="padding:0 12px" onclick="openBarcodeCameraScanner('barcode-input')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
+          <button type="button" class="btn btn-secondary mobile-only barcode-cam-btn" style="padding:0 12px" onclick="openBarcodeCameraScanner('barcode-input')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
         </div>
         <div class="tbl-wrap">
           <table><thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Stock</th></tr></thead>
@@ -1107,10 +1115,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
       
       <div class="form-group" style="position:relative">
         <label>Buscar Producto a Financiar</label>
-        <div style="display:flex;gap:5px;">
+        <div class="cotizador-search-row" style="display:flex;gap:5px;">
           <input type="text" id="cotizador-search-prod" placeholder="Escribe nombre o código..." autocomplete="off" style="flex:1" oninput="filterCotizadorProducts(this.value)">
           <input type="text" id="cotizador-barcode" placeholder="Código barras" autocomplete="off" style="width:120px" oninput="handleCotizadorBarcode(this.value)">
-          <button type="button" class="btn btn-secondary mobile-only" style="padding:0 12px" onclick="openBarcodeCameraScanner('cotizador-barcode')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
+          <button type="button" class="btn btn-secondary mobile-only barcode-cam-btn" style="padding:0 12px" onclick="openBarcodeCameraScanner('cotizador-barcode')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
         </div>
         <div id="cotizador-search-results" class="search-results-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:4px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 5px 15px rgba(0,0,0,0.1)"></div>
       </div>
