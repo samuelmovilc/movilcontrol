@@ -471,8 +471,25 @@ app.post('/api/ventas', tenantAuth, async (req, res) => {
         }
         
         if (parseFloat(plan.inicial) > 0) {
-          await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?)',
-            [plan.inicial, 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId]);
+          // El abono inicial puede haberse pagado en el método que el usuario eligió en el
+          // POS (Efectivo, Transferencia, Tarjeta...), e incluso dividido entre varios si se
+          // agregaron filas de pago adicionales. Se registra un movimiento por cada método
+          // de pago distinto de "Crédito" que venga en la venta, en vez de asumir Efectivo.
+          const metodosIniciales = (metodos_pago || []).filter(function(m) {
+            const metodoLower = String(m.metodo || '').toLowerCase();
+            return !metodoLower.includes('crédito') && !metodoLower.includes('credito') && parseFloat(m.monto) > 0;
+          });
+          if (metodosIniciales.length) {
+            for (const m of metodosIniciales) {
+              await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?)',
+                [parseFloat(m.monto), m.metodo || 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId]);
+            }
+          } else {
+            // Respaldo: si no vino el detalle de métodos, se registra igual para no perder
+            // el abono de la cartera, asumiendo Efectivo como antes.
+            await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?)',
+              [plan.inicial, 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId]);
+          }
         }
       }
     }
