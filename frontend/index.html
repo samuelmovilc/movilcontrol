@@ -462,6 +462,16 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 .cartera-client-select { padding: 7px 12px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; outline: none; min-width: 250px; background: #fff; }
 .cartera-icon-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 .abono-row { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 11.5px; flex-wrap: wrap; }
+/* Botones de estado del módulo de Órdenes de Servicio (igual a los de Cartera, pero con su
+   propia clase para que los selectores JS no mezclen el estado activo entre ambos módulos) */
+.ordenes-btn-group { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; background: var(--surface2); padding: 4px; border-radius: 20px; border: 1px solid var(--border); }
+.ordenes-state-btn { border: none; background: transparent; padding: 6px 14px; border-radius: 16px; font-size: 11.5px; font-weight: 600; color: var(--text-mid); cursor: pointer; transition: all 0.2s; }
+.ordenes-state-btn:hover { background: rgba(0,0,0,0.04); }
+.ordenes-state-btn.active { background: var(--electric); color: #fff; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3); }
+.prenda-row { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; background: var(--surface2); display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 6px; position: relative; }
+.prenda-row .prenda-remove { position: absolute; top: 6px; right: 6px; }
+.tecnico-saldo-pos { color: var(--red); font-weight: 700; }
+.tecnico-saldo-neg { color: var(--green); font-weight: 700; }
 .abono-row .abono-info { flex: 1; min-width: 140px; }
 .abono-row .abono-monto { font-weight: 800; color: var(--green-dark); font-size: 13px; }
 .abono-row .abono-meta { color: var(--text-light); font-size: 10.5px; margin-top: 2px; }
@@ -592,6 +602,8 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <button class="tab-btn" onclick="showModule('caja')" id="tab-caja"><i class="fa-solid fa-coins"></i> Caja</button>
     <button class="tab-btn" onclick="showModule('cartera')" id="tab-cartera"><i class="fa-solid fa-wallet"></i> Cartera</button>
     <button class="tab-btn" onclick="showModule('productos')" id="tab-productos"><i class="fa-solid fa-boxes-stacked"></i> Productos</button>
+    <button class="tab-btn" onclick="showModule('ordenes')" id="tab-ordenes"><i class="fa-solid fa-shirt"></i> Órdenes</button>
+    <button class="tab-btn" onclick="showModule('egresos')" id="tab-egresos"><i class="fa-solid fa-money-bill-transfer"></i> Egresos</button>
     <button class="tab-btn" onclick="showModule('config')" id="tab-config"><i class="fa-solid fa-gear"></i> Config</button>
   </nav>
   <button class="btn-salir" onclick="salir()"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
@@ -901,7 +913,94 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 </div>
 </main>
 
+<!-- ═══ ORDENES DE SERVICIO MODULE ═══ -->
+<main class="module" id="module-ordenes">
+<h2 class="section-title"><i class="fa-solid fa-shirt"></i> Órdenes de Servicio</h2>
+<div class="grid-layout">
+  <div class="card" style="grid-column:1/-1">
+    <div class="cartera-filters-bar">
+      <div class="cartera-filters-left">
+        <div class="ordenes-btn-group" id="ordenes-estado-group">
+          <button class="ordenes-state-btn active" onclick="setOrdenesEstado('')" data-estado="">Todas</button>
+          <button class="ordenes-state-btn" onclick="setOrdenesEstado('cotizacion')" data-estado="cotizacion">En Cotización</button>
+          <button class="ordenes-state-btn" onclick="setOrdenesEstado('terminada')" data-estado="terminada">Terminadas</button>
+          <button class="ordenes-state-btn" onclick="setOrdenesEstado('anulada')" data-estado="anulada">Anuladas</button>
+        </div>
+        <select id="filter-ordenes-tecnico" class="cartera-client-select" style="min-width:170px" onchange="loadOrdenes()">
+          <option value="">Todos los técnicos...</option>
+        </select>
+        <input type="number" id="filter-ordenes-monto-min" placeholder="Monto mín." style="width:100px;padding:7px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px" oninput="loadOrdenes()">
+        <input type="number" id="filter-ordenes-monto-max" placeholder="Monto máx." style="width:100px;padding:7px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px" oninput="loadOrdenes()">
+        <div class="cartera-icon-actions">
+          <button class="btn btn-secondary btn-xs" onclick="clearOrdenesFilters()" title="Borrar Filtros" style="padding:7px 10px;border-radius:50%"><i class="fa-solid fa-filter-circle-xmark"></i></button>
+        </div>
+      </div>
+      <div class="cartera-filters-right">
+        <button class="btn btn-secondary" onclick="abrirModalTecnicos()"><i class="fa-solid fa-user-gear"></i> Técnicos</button>
+        <button class="btn btn-primary" onclick="abrirNuevaOrden()"><i class="fa-solid fa-plus"></i> Nueva Orden</button>
+      </div>
+    </div>
 
+    <div class="tbl-wrap">
+      <table style="font-size:12px">
+        <thead><tr>
+          <th>Folio</th><th>Cliente</th><th>Recibido</th><th>Prendas</th><th>Total</th><th>Abonado</th><th>Saldo</th><th>Estado</th><th>Acciones</th>
+        </tr></thead>
+        <tbody id="ordenes-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</main>
+
+<!-- ═══ OTROS EGRESOS MODULE ═══ -->
+<main class="module" id="module-egresos">
+<h2 class="section-title"><i class="fa-solid fa-money-bill-transfer"></i> Otros Egresos</h2>
+<div class="grid-layout">
+  <div class="card" style="grid-column:1/-1">
+    <div class="card-header"><i class="fa-solid fa-receipt"></i> Gastos del día</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:10px 0">
+      <div class="form-group"><label>Categoría</label><input type="text" id="egreso-categoria" placeholder="Arriendo, servicios..."></div>
+      <div class="form-group"><label>Monto</label><input type="number" id="egreso-monto" placeholder="0" min="0" step="0.01"></div>
+      <div class="form-group"><label>Método</label><select id="egreso-metodo"></select></div>
+      <div class="form-group"><label>Fecha</label><input type="date" id="egreso-fecha"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>Observaciones</label><input type="text" id="egreso-obs" placeholder="Opcional"></div>
+    </div>
+    <button class="btn btn-primary" onclick="registrarEgreso()"><i class="fa-solid fa-floppy-disk"></i> Registrar Gasto</button>
+
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px">
+      <label style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase">Desde</label>
+      <input type="date" id="egresos-filtro-desde" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px" onchange="loadEgresosDia()">
+      <label style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase">Hasta</label>
+      <input type="date" id="egresos-filtro-hasta" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px" onchange="loadEgresosDia()">
+      <button class="btn btn-secondary btn-xs" onclick="clearEgresosFiltro()"><i class="fa-solid fa-filter-circle-xmark"></i></button>
+    </div>
+    <div class="tbl-wrap" style="margin-top:8px">
+      <table style="font-size:12px">
+        <thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr></thead>
+        <tbody id="egresos-dia-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="grid-column:1/-1">
+    <div class="card-header"><i class="fa-solid fa-user-clock"></i> Liquidación de Técnicos</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0">
+      <label style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase">Desde</label>
+      <input type="date" id="tecnicos-liq-desde" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px" onchange="loadTecnicosResumen()">
+      <label style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase">Hasta</label>
+      <input type="date" id="tecnicos-liq-hasta" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px" onchange="loadTecnicosResumen()">
+      <button class="btn btn-secondary btn-xs" onclick="clearTecnicosLiqFiltro()"><i class="fa-solid fa-filter-circle-xmark"></i></button>
+    </div>
+    <div class="tbl-wrap">
+      <table style="font-size:12px">
+        <thead><tr><th>Técnico</th><th>Comisión Ganada</th><th>Pagado</th><th>Saldo</th><th>Acciones</th></tr></thead>
+        <tbody id="tecnicos-resumen-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</main>
 
 <!-- MODALES -->
 <div class="modal-overlay" id="modal-importar-cotizacion">
@@ -1187,6 +1286,137 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   </div>
 </div>
 
+<!-- ═══ TECNICOS ═══ -->
+<div class="modal-overlay" id="modal-tecnicos">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header"><span><i class="fa-solid fa-user-gear"></i> Técnicos / Vendedores</span><button class="modal-close" onclick="closeModal('modal-tecnicos')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="tec-editing-id">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
+        <div class="form-group"><label>ID / Cédula</label><input type="text" id="tec-id"></div>
+        <div class="form-group"><label>Nombre</label><input type="text" id="tec-nombre"></div>
+        <div class="form-group"><label>Teléfono</label><input type="text" id="tec-telefono"></div>
+        <div class="form-group"><label>Comisión %</label><input type="number" id="tec-comision" min="0" max="100" step="0.1" placeholder="0"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-primary" onclick="guardarTecnico()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+        <button class="btn btn-secondary" onclick="resetTecnicoForm()">Cancelar edición</button>
+      </div>
+      <div class="tbl-wrap" style="margin-top:14px">
+        <table style="font-size:12px">
+          <thead><tr><th>ID</th><th>Nombre</th><th>Teléfono</th><th>Comisión</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <tbody id="tecnicos-lista-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ NUEVA ORDEN DE SERVICIO ═══ -->
+<div class="modal-overlay" id="modal-orden-nueva">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-header"><span><i class="fa-solid fa-shirt"></i> Nueva Orden de Servicio</span><button class="modal-close" onclick="closeModal('modal-orden-nueva')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+        <div class="form-group"><label>Cliente</label><select id="orden-cliente"></select></div>
+        <div class="form-group"><label>Fecha recibido</label><input type="date" id="orden-fecha-recibido"></div>
+        <div class="form-group"><label>Entrega estimada</label><input type="date" id="orden-fecha-entrega"></div>
+      </div>
+      <div class="form-group"><label>Observaciones generales</label><input type="text" id="orden-observaciones" placeholder="Opcional"></div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <h4 style="margin:0;color:var(--text-light);font-size:13px">Prendas</h4>
+        <button type="button" class="btn btn-secondary btn-xs" onclick="agregarPrendaRow()"><i class="fa-solid fa-plus"></i> Agregar prenda</button>
+      </div>
+      <div id="orden-prendas-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div style="text-align:right;font-weight:700;font-size:15px">Total: <span id="orden-total-preview">$0.00</span></div>
+
+      <div style="border-top:1px solid var(--border);padding-top:10px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="orden-tiene-abono" onchange="toggleOrdenAbono()"> El cliente deja un abono al entregar la(s) prenda(s)
+        </label>
+        <div id="orden-abono-box" style="display:none;margin-top:8px">
+          <div class="multi-pay-list" id="orden-abono-pay-list" style="max-height:none"></div>
+          <button type="button" class="btn btn-secondary btn-xs" onclick="addPayRowGeneric('orden-abono-pay-list')" style="margin-top:4px"><i class="fa-solid fa-plus"></i> Método de pago</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="guardarNuevaOrden()" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Crear Orden</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DETALLE / LIQUIDAR ORDEN ═══ -->
+<div class="modal-overlay" id="modal-orden-detalle">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-header"><span><i class="fa-solid fa-shirt"></i> Orden <span id="od-folio"></span></span><button class="modal-close" onclick="closeModal('modal-orden-detalle')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:12px">
+        <div><b>Cliente:</b> <span id="od-cliente"></span></div>
+        <div><b>Recibido:</b> <span id="od-fecha-recibido"></span></div>
+        <div><b>Entrega estimada:</b> <span id="od-fecha-entrega"></span></div>
+        <div><b>Estado:</b> <span id="od-estado"></span></div>
+      </div>
+      <div id="od-obs-wrap" style="font-size:12px"><b>Observaciones:</b> <span id="od-observaciones"></span></div>
+
+      <div class="tbl-wrap">
+        <table style="font-size:12px">
+          <thead><tr><th>Prenda</th><th>Trabajo</th><th>Descripción</th><th>Técnico</th><th>Precio</th><th>Comisión</th></tr></thead>
+          <tbody id="od-prendas-body"></tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:20px;font-size:13px;font-weight:600">
+        <div>Total: <span id="od-total"></span></div>
+        <div>Abonado: <span id="od-abonado"></span></div>
+        <div>Saldo: <span id="od-saldo"></span></div>
+      </div>
+
+      <div id="od-venta-wrap" style="display:none;font-size:12px;color:var(--text-light)">
+        Venta asociada: <b id="od-venta-folio"></b>
+      </div>
+
+      <div id="od-liquidar-box" style="display:none;border-top:1px solid var(--border);padding-top:10px">
+        <h4 style="margin:0 0 8px;color:var(--text-light);font-size:13px">Cobrar y entregar</h4>
+        <div class="multi-pay-list" id="od-liquidar-pay-list" style="max-height:none"></div>
+        <button type="button" class="btn btn-secondary btn-xs" onclick="addPayRowGeneric('od-liquidar-pay-list')" style="margin-top:4px"><i class="fa-solid fa-plus"></i> Método de pago</button>
+        <div id="od-financiar-box" style="margin-top:10px;display:none">
+          <div style="background:var(--electric-pale);padding:8px 10px;border-radius:var(--radius-sm);font-size:12px;color:var(--electric-dark);margin-bottom:8px">
+            Queda saldo pendiente: <b id="od-saldo-restante-preview">$0.00</b>. Se financia igual que un crédito.
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group"><label># Cuotas</label><input type="number" id="od-num-cuotas" min="1" value="1"></div>
+            <div class="form-group"><label>Frecuencia</label>
+              <select id="od-frecuencia"><option value="semanal">Semanal</option><option value="quincenal" selected>Quincenal</option><option value="mensual">Mensual</option></select>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="confirmarLiquidarOrden()" style="width:100%;justify-content:center;margin-top:10px"><i class="fa-solid fa-check"></i> Confirmar</button>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:6px" id="od-actions">
+        <button class="btn btn-secondary" onclick="mostrarLiquidarBox()" id="od-btn-liquidar"><i class="fa-solid fa-cash-register"></i> Liquidar / Entregar</button>
+        <button class="btn btn-danger" onclick="anularOrdenActual()" id="od-btn-anular"><i class="fa-solid fa-ban"></i> Anular</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGO A TECNICO ═══ -->
+<div class="modal-overlay" id="modal-tecnico-pago">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><span><i class="fa-solid fa-hand-holding-dollar"></i> Registrar pago a <span id="tp-nombre"></span></span><button class="modal-close" onclick="closeModal('modal-tecnico-pago')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:8px">
+      <input type="hidden" id="tp-tecnico-id">
+      <div class="form-group"><label>Monto</label><input type="number" id="tp-monto" min="0" step="0.01"></div>
+      <div class="form-group"><label>Método</label><select id="tp-metodo"></select></div>
+      <div class="form-group"><label>Fecha de pago</label><input type="date" id="tp-fecha"></div>
+      <div class="form-group"><label>Observaciones</label><input type="text" id="tp-obs" placeholder="Opcional"></div>
+      <button class="btn btn-primary" onclick="confirmarPagoTecnico()" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Registrar Pago</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 <div id="print-area" style="display:none"></div>
 
@@ -1250,6 +1480,18 @@ function checkModules() {
       if (el) el.style.display = 'none';
     }
   });
+  // "Órdenes de Servicio" (y "Egresos", que comparte el mismo interruptor) es un módulo
+  // nuevo y específico de talleres de confección/sastrería: al contrario de los módulos de
+  // arriba, que por defecto están prendidos si el tenant no tiene esa llave guardada, este
+  // debe quedar APAGADO por defecto para no aparecerle de la nada a los tenants existentes
+  // (una tienda de electrodomésticos, por ejemplo) hasta que se lo activen explícitamente
+  // desde el SaaS admin.
+  if (mods['ordenes'] !== true) {
+    var elOrdenes = document.getElementById('tab-ordenes');
+    if (elOrdenes) elOrdenes.style.display = 'none';
+    var elEgresos = document.getElementById('tab-egresos');
+    if (elEgresos) elEgresos.style.display = 'none';
+  }
 
   // Update business name in UI if element exists
   const bName = localStorage.getItem('saas_business');
@@ -1326,6 +1568,7 @@ async function initApp(){
   }catch(e){toast('Error cargando config: '+e.message,'error')}
   await loadProductos();
   await loadClientesDropdown();
+  await loadTecnicosDropdowns();
   loadConfigUI();
   document.getElementById('caja-date-from').value=todayStr();
   document.getElementById('caja-date-to').value=todayStr();
@@ -1376,6 +1619,13 @@ function showModule(n){
   if(n==='caja')loadCajaVentas();
   if(n==='config')loadConfigUI();
   if(n==='cartera')loadCartera();
+  if(n==='ordenes')loadOrdenes();
+  if(n==='egresos'){
+    document.getElementById('egreso-fecha').value = todayStr();
+    populateMetodoSelect('egreso-metodo');
+    loadEgresosDia();
+    loadTecnicosResumen();
+  }
   if(n==='finanzas') {
      document.getElementById('fin-date-from').value = todayStr();
      document.getElementById('fin-date-to').value = todayStr();
@@ -2998,6 +3248,10 @@ async function loadClientesDropdown(resetPosDefault) {
     if (cotSelect) {
       cotSelect.innerHTML = html || '<option value="" disabled selected>No hay clientes — créalos en Configuración</option>';
     }
+    var ordenSelect = document.getElementById('orden-cliente');
+    if (ordenSelect) {
+      ordenSelect.innerHTML = html || '<option value="" disabled selected>No hay clientes — créalos en Configuración</option>';
+    }
   } catch(e) {
     console.error('Error cargando clientes:', e);
     toast('No se pudieron cargar los clientes: ' + e.message, 'error');
@@ -3911,6 +4165,546 @@ async function loadInforme() {
   } catch(e) {
     content.innerHTML = '<div style="color:var(--red);padding:20px;text-align:center">Error: ' + e.message + '</div>';
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ÓRDENES DE SERVICIO (sastrería: reparación / diseño de prendas)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Helpers compartidos de métodos de pago (independientes del
+   #multi-pay-list global del POS, para no interferir con el carrito) ── */
+function addPayRowGeneric(containerId){
+  var mp = Array.isArray(configCache.metodos_pago)
+    ? configCache.metodos_pago.filter(function(m){ var l=m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito'); })
+    : ['Efectivo','Tarjeta débito','Transferencia'];
+  var list = document.getElementById(containerId);
+  if(!list) return;
+  var row = document.createElement('div'); row.className = 'multi-pay-row';
+  var opts = mp.map(function(m){ return '<option>'+m+'</option>'; }).join('');
+  row.innerHTML = '<select style="flex:1">'+opts+'</select><input type="number" placeholder="Monto" min="0" step="0.01"><button type="button" class="btn btn-danger btn-xs" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>';
+  list.appendChild(row);
+}
+function getPaymentRowsFrom(containerId){
+  return Array.from(document.querySelectorAll('#'+containerId+' .multi-pay-row')).map(function(row){
+    var s = row.querySelector('select'); var inp = row.querySelector('input');
+    return { metodo: s ? s.value : '', monto: parseFloat(inp ? inp.value : 0) || 0 };
+  }).filter(function(r){ return r.monto > 0; });
+}
+function populateMetodoSelect(selectId){
+  var sel = document.getElementById(selectId);
+  if(!sel) return;
+  var mp = Array.isArray(configCache.metodos_pago)
+    ? configCache.metodos_pago.filter(function(m){ var l=m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito'); })
+    : ['Efectivo'];
+  sel.innerHTML = mp.map(function(m){ return '<option>'+m+'</option>'; }).join('');
+}
+function generarFolioOrden(){
+  return 'ORDEN-' + todayStr().replace(/-/g,'') + '-' + Date.now().toString().slice(-6);
+}
+
+/* ── TÉCNICOS ── */
+var tecnicosCache = [];
+
+function opcionesTecnicosHTML(){
+  return '<option value="">— Sin asignar —</option>' + tecnicosCache.filter(function(t){ return t.activo; })
+    .map(function(t){ return '<option value="'+t.id+'" data-comision="'+t.comision_porcentaje+'">'+t.nombre+'</option>'; }).join('');
+}
+
+async function loadTecnicosDropdowns(){
+  try { tecnicosCache = await apiGet('/tecnicos'); } catch(e) { console.error('Error cargando técnicos:', e); return; }
+  document.querySelectorAll('.pr-tecnico').forEach(function(sel){ var v=sel.value; sel.innerHTML=opcionesTecnicosHTML(); sel.value=v; });
+  var filtroSel = document.getElementById('filter-ordenes-tecnico');
+  if(filtroSel){
+    var cur = filtroSel.value;
+    filtroSel.innerHTML = '<option value="">Todos los técnicos...</option>' + tecnicosCache.map(function(t){ return '<option value="'+t.id+'">'+t.nombre+'</option>'; }).join('');
+    filtroSel.value = cur;
+  }
+}
+
+function abrirModalTecnicos(){
+  resetTecnicoForm();
+  loadTecnicosLista();
+  openModal('modal-tecnicos');
+}
+
+async function loadTecnicosLista(){
+  try { tecnicosCache = await apiGet('/tecnicos'); } catch(e) { toast('Error cargando técnicos: '+e.message,'error'); return; }
+  var body = document.getElementById('tecnicos-lista-body');
+  if(!tecnicosCache.length){
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">No hay técnicos registrados.</td></tr>';
+  } else {
+    body.innerHTML = tecnicosCache.map(function(t){
+      return '<tr>'
+        + '<td>'+t.id+'</td>'
+        + '<td>'+t.nombre+'</td>'
+        + '<td>'+(t.telefono||'—')+'</td>'
+        + '<td>'+parseFloat(t.comision_porcentaje).toFixed(1)+'%</td>'
+        + '<td>'+(t.activo?'<span style="color:var(--green)">Activo</span>':'<span style="color:var(--text-light)">Inactivo</span>')+'</td>'
+        + '<td><button class="btn btn-secondary btn-xs" onclick="editarTecnico(\''+t.id+'\')"><i class="fa-solid fa-pen"></i></button> '
+        + '<button class="btn btn-danger btn-xs" onclick="eliminarTecnico(\''+t.id+'\')"><i class="fa-solid fa-trash"></i></button></td>'
+        + '</tr>';
+    }).join('');
+  }
+  document.querySelectorAll('.pr-tecnico').forEach(function(sel){ var v=sel.value; sel.innerHTML=opcionesTecnicosHTML(); sel.value=v; });
+}
+
+function editarTecnico(id){
+  var t = tecnicosCache.find(function(x){ return String(x.id)===String(id); });
+  if(!t) return;
+  document.getElementById('tec-editing-id').value = t.id;
+  document.getElementById('tec-id').value = t.id;
+  document.getElementById('tec-id').disabled = true;
+  document.getElementById('tec-nombre').value = t.nombre;
+  document.getElementById('tec-telefono').value = t.telefono || '';
+  document.getElementById('tec-comision').value = t.comision_porcentaje;
+}
+
+function resetTecnicoForm(){
+  document.getElementById('tec-editing-id').value = '';
+  document.getElementById('tec-id').value = '';
+  document.getElementById('tec-id').disabled = false;
+  document.getElementById('tec-nombre').value = '';
+  document.getElementById('tec-telefono').value = '';
+  document.getElementById('tec-comision').value = '';
+}
+
+async function guardarTecnico(){
+  var editingId = document.getElementById('tec-editing-id').value;
+  var id = document.getElementById('tec-id').value.trim();
+  var nombre = document.getElementById('tec-nombre').value.trim();
+  var telefono = document.getElementById('tec-telefono').value.trim();
+  var comision = parseFloat(document.getElementById('tec-comision').value) || 0;
+  if(!id || !nombre){ toast('ID y nombre son obligatorios','error'); return; }
+  try {
+    if(editingId){
+      await apiPut('/tecnicos/'+editingId, { nombre: nombre, telefono: telefono, comision_porcentaje: comision, activo: true });
+      toast('Técnico actualizado','success');
+    } else {
+      await apiPost('/tecnicos', { id: id, nombre: nombre, telefono: telefono, comision_porcentaje: comision });
+      toast('Técnico creado','success');
+    }
+    resetTecnicoForm();
+    loadTecnicosLista();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function eliminarTecnico(id){
+  var t = tecnicosCache.find(function(x){ return String(x.id)===String(id); });
+  confirmDlg('Eliminar técnico', '¿Eliminar a '+(t?t.nombre:id)+'? Si ya tiene prendas asociadas, se desactivará en vez de borrarse.', async function(){
+    try {
+      var r = await apiDelete('/tecnicos/'+id);
+      toast(r.desactivado ? 'Técnico desactivado (tiene historial)' : 'Técnico eliminado', 'success');
+      loadTecnicosLista();
+    } catch(e) { toast('Error: '+e.message,'error'); }
+  });
+}
+
+/* ── LISTADO / FILTROS DE ÓRDENES ── */
+var ordenesEstadoFiltro = '';
+var ordenesCache = [];
+var ordenActual = null;
+
+function setOrdenesEstado(estado){
+  document.querySelectorAll('.ordenes-state-btn').forEach(function(b){ b.classList.remove('active'); });
+  var btn = document.querySelector('.ordenes-state-btn[data-estado="'+estado+'"]');
+  if(btn) btn.classList.add('active');
+  ordenesEstadoFiltro = estado;
+  loadOrdenes();
+}
+
+function clearOrdenesFilters(){
+  document.getElementById('filter-ordenes-tecnico').value = '';
+  document.getElementById('filter-ordenes-monto-min').value = '';
+  document.getElementById('filter-ordenes-monto-max').value = '';
+  setOrdenesEstado('');
+}
+
+async function loadOrdenes(){
+  var params = [];
+  if(ordenesEstadoFiltro) params.push('estado='+encodeURIComponent(ordenesEstadoFiltro));
+  var tec = document.getElementById('filter-ordenes-tecnico').value;
+  if(tec) params.push('tecnico_id='+encodeURIComponent(tec));
+  var mmin = document.getElementById('filter-ordenes-monto-min').value;
+  if(mmin) params.push('monto_min='+encodeURIComponent(mmin));
+  var mmax = document.getElementById('filter-ordenes-monto-max').value;
+  if(mmax) params.push('monto_max='+encodeURIComponent(mmax));
+  try {
+    ordenesCache = await apiGet('/ordenes'+(params.length?'?'+params.join('&'):''));
+  } catch(e) { toast('Error cargando órdenes: '+e.message,'error'); return; }
+  renderOrdenesTable();
+}
+
+function estadoOrdenLabel(estado){
+  if(estado==='cotizacion') return '<span style="color:var(--electric-dark);font-weight:700">Cotización</span>';
+  if(estado==='terminada') return '<span style="color:var(--green);font-weight:700">Terminada</span>';
+  return '<span style="color:var(--text-light)">Anulada</span>';
+}
+
+function renderOrdenesTable(){
+  var body = document.getElementById('ordenes-body');
+  if(!ordenesCache.length){
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-light);padding:16px">No hay órdenes para este filtro.</td></tr>';
+    return;
+  }
+  body.innerHTML = ordenesCache.map(function(o){
+    var prendasResumen = (o.prendas||[]).map(function(p){ return p.tipo_prenda; }).join(', ');
+    return '<tr>'
+      + '<td style="font-weight:700;color:var(--electric)">'+o.folio+'</td>'
+      + '<td>'+(o.cliente||'')+'</td>'
+      + '<td>'+fmtDate(o.fecha_recibido)+'</td>'
+      + '<td>'+(prendasResumen||'—')+'</td>'
+      + '<td>'+fmt(o.total)+'</td>'
+      + '<td>'+fmt(o.abonado)+'</td>'
+      + '<td>'+fmt(o.saldo)+'</td>'
+      + '<td>'+estadoOrdenLabel(o.estado)+'</td>'
+      + '<td><button class="btn btn-secondary btn-xs" onclick="verOrdenDetalle('+o.id+')"><i class="fa-solid fa-eye"></i></button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+/* ── NUEVA ORDEN ── */
+function abrirNuevaOrden(){
+  document.getElementById('orden-cliente').value = '';
+  document.getElementById('orden-fecha-recibido').value = todayStr();
+  document.getElementById('orden-fecha-entrega').value = '';
+  document.getElementById('orden-observaciones').value = '';
+  document.getElementById('orden-prendas-list').innerHTML = '';
+  document.getElementById('orden-tiene-abono').checked = false;
+  document.getElementById('orden-abono-box').style.display = 'none';
+  document.getElementById('orden-abono-pay-list').innerHTML = '';
+  agregarPrendaRow();
+  openModal('modal-orden-nueva');
+}
+
+function agregarPrendaRow(){
+  var list = document.getElementById('orden-prendas-list');
+  var row = document.createElement('div');
+  row.className = 'prenda-row';
+  row.innerHTML =
+    '<button type="button" class="btn btn-danger btn-xs prenda-remove" onclick="this.closest(\'.prenda-row\').remove();actualizarTotalOrdenPreview()"><i class="fa-solid fa-xmark"></i></button>'
+    + '<div class="form-group"><label>Prenda</label><input type="text" class="pr-tipo" placeholder="Camisa, pantalón..."></div>'
+    + '<div class="form-group"><label>Trabajo</label><select class="pr-trabajo"><option value="reparacion">Reparación</option><option value="diseno">Diseño</option><option value="otro">Otro</option></select></div>'
+    + '<div class="form-group"><label>Precio</label><input type="number" class="pr-precio" min="0" step="0.01" oninput="actualizarTotalOrdenPreview()"></div>'
+    + '<div class="form-group"><label>Técnico</label><select class="pr-tecnico" onchange="autoComisionPrenda(this)">'+opcionesTecnicosHTML()+'</select></div>'
+    + '<div class="form-group"><label>Comisión %</label><input type="number" class="pr-comision" min="0" max="100" step="0.1" value="0"></div>'
+    + '<div class="form-group" style="grid-column:1/-1"><label>Descripción / daño a reparar</label><input type="text" class="pr-descripcion" placeholder="Qué se va a hacer"></div>'
+    + '<div class="form-group" style="grid-column:1/-1"><label>Observaciones</label><input type="text" class="pr-obs" placeholder="Opcional"></div>';
+  list.appendChild(row);
+}
+
+function autoComisionPrenda(sel){
+  var row = sel.closest('.prenda-row');
+  var opt = sel.options[sel.selectedIndex];
+  var comision = opt ? (opt.getAttribute('data-comision') || 0) : 0;
+  row.querySelector('.pr-comision').value = comision;
+}
+
+function actualizarTotalOrdenPreview(){
+  var total = 0;
+  document.querySelectorAll('#orden-prendas-list .pr-precio').forEach(function(inp){ total += parseFloat(inp.value) || 0; });
+  document.getElementById('orden-total-preview').textContent = fmt(total);
+}
+
+function toggleOrdenAbono(){
+  var checked = document.getElementById('orden-tiene-abono').checked;
+  document.getElementById('orden-abono-box').style.display = checked ? 'block' : 'none';
+  if(checked && !document.querySelectorAll('#orden-abono-pay-list .multi-pay-row').length){
+    addPayRowGeneric('orden-abono-pay-list');
+  }
+}
+
+function leerPrendasDelFormulario(){
+  var prendas = [];
+  document.querySelectorAll('#orden-prendas-list .prenda-row').forEach(function(row){
+    var tipo = row.querySelector('.pr-tipo').value.trim();
+    var precio = parseFloat(row.querySelector('.pr-precio').value) || 0;
+    if(!tipo && precio<=0) return;
+    prendas.push({
+      tipo_prenda: tipo || 'Prenda',
+      tipo_trabajo: row.querySelector('.pr-trabajo').value,
+      precio: precio,
+      tecnico_id: row.querySelector('.pr-tecnico').value || null,
+      comision_porcentaje: parseFloat(row.querySelector('.pr-comision').value) || 0,
+      descripcion: row.querySelector('.pr-descripcion').value.trim(),
+      observaciones: row.querySelector('.pr-obs').value.trim()
+    });
+  });
+  return prendas;
+}
+
+async function guardarNuevaOrden(){
+  var clienteStr = document.getElementById('orden-cliente').value;
+  if(!clienteStr){ toast('Selecciona un cliente','error'); return; }
+  var clienteId = clienteStr.split(' - ')[0].trim();
+  var fechaRecibido = document.getElementById('orden-fecha-recibido').value;
+  if(!fechaRecibido){ toast('Indica la fecha de recepción','error'); return; }
+  var prendas = leerPrendasDelFormulario();
+  if(!prendas.length){ toast('Agrega al menos una prenda con tipo y precio','error'); return; }
+
+  var tieneAbono = document.getElementById('orden-tiene-abono').checked;
+  var metodosAbono = tieneAbono ? getPaymentRowsFrom('orden-abono-pay-list') : [];
+  var abonoInicial = metodosAbono.reduce(function(s,m){ return s+m.monto; }, 0);
+
+  var payload = {
+    folio: generarFolioOrden(),
+    cliente_id: clienteId,
+    cliente: clienteStr,
+    fecha_recibido: fechaRecibido,
+    fecha_entrega_estimada: document.getElementById('orden-fecha-entrega').value || null,
+    observaciones: document.getElementById('orden-observaciones').value.trim(),
+    prendas: prendas,
+    abono_inicial: abonoInicial,
+    metodos_pago: metodosAbono
+  };
+
+  try {
+    showLoading('Creando orden...');
+    await apiPost('/ordenes', payload);
+    hideLoading();
+    toast('Orden creada correctamente','success');
+    closeModal('modal-orden-nueva');
+    loadOrdenes();
+  } catch(e) {
+    hideLoading();
+    toast('Error: '+e.message,'error');
+  }
+}
+
+/* ── DETALLE / LIQUIDAR ORDEN ── */
+async function verOrdenDetalle(id){
+  try {
+    showLoading('Cargando orden...');
+    ordenActual = await apiGet('/ordenes/'+id);
+    hideLoading();
+  } catch(e) { hideLoading(); toast('Error: '+e.message,'error'); return; }
+
+  document.getElementById('od-folio').textContent = ordenActual.folio;
+  document.getElementById('od-cliente').textContent = ordenActual.cliente || '';
+  document.getElementById('od-fecha-recibido').textContent = fmtDate(ordenActual.fecha_recibido);
+  document.getElementById('od-fecha-entrega').textContent = ordenActual.fecha_entrega_estimada ? fmtDate(ordenActual.fecha_entrega_estimada) : '—';
+  document.getElementById('od-estado').innerHTML = estadoOrdenLabel(ordenActual.estado);
+  document.getElementById('od-observaciones').textContent = ordenActual.observaciones || '—';
+  document.getElementById('od-total').textContent = fmt(ordenActual.total);
+  document.getElementById('od-abonado').textContent = fmt(ordenActual.abonado);
+  document.getElementById('od-saldo').textContent = fmt(ordenActual.saldo);
+
+  document.getElementById('od-prendas-body').innerHTML = (ordenActual.prendas||[]).map(function(p){
+    var tec = tecnicosCache.find(function(t){ return String(t.id)===String(p.tecnico_id); });
+    var trabajoLbl = p.tipo_trabajo==='reparacion' ? 'Reparación' : (p.tipo_trabajo==='diseno' ? 'Diseño' : 'Otro');
+    return '<tr>'
+      + '<td>'+p.tipo_prenda+'</td>'
+      + '<td>'+trabajoLbl+'</td>'
+      + '<td>'+(p.descripcion||'—')+'</td>'
+      + '<td>'+(tec?tec.nombre:(p.tecnico_id||'—'))+'</td>'
+      + '<td>'+fmt(p.precio)+'</td>'
+      + '<td>'+parseFloat(p.comision_porcentaje).toFixed(1)+'% ('+fmt(p.comision_monto)+')</td>'
+      + '</tr>';
+  }).join('');
+
+  if(ordenActual.venta_id){
+    document.getElementById('od-venta-wrap').style.display = 'block';
+    document.getElementById('od-venta-folio').textContent = '#'+ordenActual.venta_id;
+  } else {
+    document.getElementById('od-venta-wrap').style.display = 'none';
+  }
+
+  var esCotizacion = ordenActual.estado === 'cotizacion';
+  document.getElementById('od-btn-liquidar').style.display = esCotizacion ? 'inline-flex' : 'none';
+  document.getElementById('od-btn-anular').style.display = esCotizacion ? 'inline-flex' : 'none';
+  document.getElementById('od-liquidar-box').style.display = 'none';
+  document.getElementById('od-liquidar-pay-list').innerHTML = '';
+  document.getElementById('od-financiar-box').style.display = 'none';
+
+  openModal('modal-orden-detalle');
+}
+
+function mostrarLiquidarBox(){
+  document.getElementById('od-liquidar-box').style.display = 'block';
+  if(!document.querySelectorAll('#od-liquidar-pay-list .multi-pay-row').length){
+    addPayRowGeneric('od-liquidar-pay-list');
+    var inputs = document.querySelectorAll('#od-liquidar-pay-list .multi-pay-row input');
+    if(inputs.length && ordenActual && ordenActual.saldo > 0) inputs[0].value = ordenActual.saldo.toFixed(2);
+  }
+  actualizarPreviewSaldoLiquidar();
+  document.querySelectorAll('#od-liquidar-pay-list input').forEach(function(inp){
+    inp.addEventListener('input', actualizarPreviewSaldoLiquidar);
+  });
+}
+
+function actualizarPreviewSaldoLiquidar(){
+  if(!ordenActual) return;
+  var montoAhora = getPaymentRowsFrom('od-liquidar-pay-list').reduce(function(s,m){ return s+m.monto; },0);
+  var saldoRestante = ordenActual.saldo - montoAhora;
+  var box = document.getElementById('od-financiar-box');
+  if(saldoRestante > 0.5){
+    box.style.display = 'block';
+    document.getElementById('od-saldo-restante-preview').textContent = fmt(saldoRestante);
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+async function confirmarLiquidarOrden(){
+  if(!ordenActual) return;
+  var metodos = getPaymentRowsFrom('od-liquidar-pay-list');
+  var montoAhora = metodos.reduce(function(s,m){ return s+m.monto; },0);
+  var saldoRestante = ordenActual.saldo - montoAhora;
+  var payload = { metodos_pago: metodos };
+  if(saldoRestante > 0.5){
+    var numCuotas = parseInt(document.getElementById('od-num-cuotas').value) || 0;
+    if(numCuotas < 1){ toast('Indica a cuántas cuotas se financia el saldo restante','error'); return; }
+    payload.num_cuotas = numCuotas;
+    payload.frecuencia = document.getElementById('od-frecuencia').value;
+  }
+  try {
+    showLoading('Liquidando orden...');
+    await apiPost('/ordenes/'+ordenActual.id+'/liquidar', payload);
+    hideLoading();
+    toast('Orden liquidada y facturada correctamente','success');
+    closeModal('modal-orden-detalle');
+    loadOrdenes();
+  } catch(e) {
+    hideLoading();
+    toast('Error: '+e.message,'error');
+  }
+}
+
+function anularOrdenActual(){
+  if(!ordenActual) return;
+  confirmDlg('Anular orden', '¿Anular la orden '+ordenActual.folio+'? Esta acción no se puede deshacer.', async function(){
+    try {
+      await apiPatch('/ordenes/'+ordenActual.id+'/anular');
+      toast('Orden anulada','success');
+      closeModal('modal-orden-detalle');
+      loadOrdenes();
+    } catch(e) { toast('Error: '+e.message,'error'); }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OTROS EGRESOS (gastos del día + liquidación semanal de técnicos)
+   ═══════════════════════════════════════════════════════════════ */
+async function registrarEgreso(){
+  var categoria = document.getElementById('egreso-categoria').value.trim();
+  var monto = parseFloat(document.getElementById('egreso-monto').value);
+  if(!categoria || !monto || monto<=0){ toast('Indica categoría y un monto válido','error'); return; }
+  var payload = {
+    tipo: 'egreso',
+    categoria: categoria,
+    monto: monto,
+    metodo_pago: document.getElementById('egreso-metodo').value,
+    observaciones: document.getElementById('egreso-obs').value.trim(),
+    fecha: document.getElementById('egreso-fecha').value || todayStr()
+  };
+  try {
+    await apiPost('/movimientos', payload);
+    toast('Gasto registrado','success');
+    document.getElementById('egreso-categoria').value = '';
+    document.getElementById('egreso-monto').value = '';
+    document.getElementById('egreso-obs').value = '';
+    loadEgresosDia();
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function clearEgresosFiltro(){
+  document.getElementById('egresos-filtro-desde').value = '';
+  document.getElementById('egresos-filtro-hasta').value = '';
+  loadEgresosDia();
+}
+
+async function loadEgresosDia(){
+  var desde = document.getElementById('egresos-filtro-desde').value;
+  var hasta = document.getElementById('egresos-filtro-hasta').value;
+  var params = ['tipo=egreso'];
+  if(desde && hasta){ params.push('fecha_inicio='+desde, 'fecha_fin='+hasta); }
+  var rows;
+  try { rows = await apiGet('/movimientos?'+params.join('&')); } catch(e) { toast('Error cargando egresos: '+e.message,'error'); return; }
+  rows = rows.filter(function(r){ return r.categoria !== 'Pago Técnico'; });
+  var body = document.getElementById('egresos-dia-body');
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">Sin gastos registrados.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(function(r){
+    var f = r.fecha || (r.created_at ? String(r.created_at).slice(0,10) : '');
+    return '<tr>'
+      + '<td>'+fmtDate(f)+'</td>'
+      + '<td>'+r.categoria+'</td>'
+      + '<td>'+fmt(r.monto)+'</td>'
+      + '<td>'+(r.metodo_pago||'—')+'</td>'
+      + '<td>'+(r.observaciones||'—')+'</td>'
+      + '<td><button class="btn btn-danger btn-xs" onclick="eliminarEgreso('+r.id+')"><i class="fa-solid fa-trash"></i></button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function eliminarEgreso(id){
+  confirmDlg('Eliminar gasto', '¿Eliminar este movimiento?', async function(){
+    try {
+      await apiDelete('/movimientos/'+id);
+      toast('Movimiento eliminado','success');
+      loadEgresosDia();
+    } catch(e) { toast('Error: '+e.message,'error'); }
+  });
+}
+
+function clearTecnicosLiqFiltro(){
+  document.getElementById('tecnicos-liq-desde').value = '';
+  document.getElementById('tecnicos-liq-hasta').value = '';
+  loadTecnicosResumen();
+}
+
+async function loadTecnicosResumen(){
+  var desde = document.getElementById('tecnicos-liq-desde').value;
+  var hasta = document.getElementById('tecnicos-liq-hasta').value;
+  var params = [];
+  if(desde && hasta){ params.push('fecha_inicio='+desde, 'fecha_fin='+hasta); }
+  var resumen;
+  try { resumen = await apiGet('/tecnicos/resumen'+(params.length?'?'+params.join('&'):'')); } catch(e) { toast('Error cargando liquidación de técnicos: '+e.message,'error'); return; }
+  var body = document.getElementById('tecnicos-resumen-body');
+  if(!resumen.length){
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:14px">No hay técnicos registrados.</td></tr>';
+    return;
+  }
+  body.innerHTML = resumen.map(function(t){
+    var saldoClass = t.saldo > 0.5 ? 'tecnico-saldo-pos' : (t.saldo < -0.5 ? 'tecnico-saldo-neg' : '');
+    var saldoLabel = t.saldo > 0.5 ? (fmt(t.saldo)+' (se le debe)') : (t.saldo < -0.5 ? (fmt(Math.abs(t.saldo))+' (a favor del taller)') : fmt(0));
+    return '<tr>'
+      + '<td>'+t.nombre+'</td>'
+      + '<td>'+fmt(t.comision_ganada)+'</td>'
+      + '<td>'+fmt(t.pagado)+'</td>'
+      + '<td class="'+saldoClass+'">'+saldoLabel+'</td>'
+      + '<td><button class="btn btn-primary btn-xs" onclick="abrirPagoTecnico(\''+t.id+'\',\''+String(t.nombre).replace(/'/g,"\\'")+'\')"><i class="fa-solid fa-hand-holding-dollar"></i> Registrar pago</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function abrirPagoTecnico(id, nombre){
+  document.getElementById('tp-tecnico-id').value = id;
+  document.getElementById('tp-nombre').textContent = nombre;
+  document.getElementById('tp-monto').value = '';
+  populateMetodoSelect('tp-metodo');
+  document.getElementById('tp-fecha').value = todayStr();
+  document.getElementById('tp-obs').value = '';
+  openModal('modal-tecnico-pago');
+}
+
+async function confirmarPagoTecnico(){
+  var id = document.getElementById('tp-tecnico-id').value;
+  var monto = parseFloat(document.getElementById('tp-monto').value);
+  if(!monto || monto<=0){ toast('Indica un monto válido','error'); return; }
+  var payload = {
+    monto: monto,
+    metodo_pago: document.getElementById('tp-metodo').value,
+    fecha: document.getElementById('tp-fecha').value || todayStr(),
+    observaciones: document.getElementById('tp-obs').value.trim()
+  };
+  try {
+    await apiPost('/tecnicos/'+id+'/pagos', payload);
+    toast('Pago registrado','success');
+    closeModal('modal-tecnico-pago');
+    loadTecnicosResumen();
+  } catch(e) { toast('Error: '+e.message,'error'); }
 }
 </script>
 

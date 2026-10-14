@@ -600,6 +600,19 @@ app.get('/api/creditos', tenantAuth, async (req, res) => {
       prodsCosto.forEach(p => { costoMap[String(p.id)] = parseFloat(p.precio_compra) || 0; });
     }
 
+    // Para créditos que vienen de una orden de servicio (sastrería), el "costo" no es un
+    // precio de compra de inventario sino lo que se le paga al técnico (su comisión) por
+    // cada prenda, así que se trae aparte en una sola consulta agrupada por orden.
+    const idsOrdenCosto = [...new Set(creditos.filter(c => c.orden_servicio_id).map(c => c.orden_servicio_id))];
+    let costoOrdenMap = {};
+    if (idsOrdenCosto.length) {
+      const [comisiones] = await req.tenantPool.query(
+        'SELECT orden_id, SUM(comision_monto) as total FROM orden_prendas WHERE orden_id IN (?) GROUP BY orden_id',
+        [idsOrdenCosto]
+      );
+      comisiones.forEach(c => { costoOrdenMap[c.orden_id] = parseFloat(c.total) || 0; });
+    }
+
     // Cargar cuotas para cada crédito
     for (const cred of creditos) {
       const [cuotas] = await req.tenantPool.query('SELECT * FROM credito_cuotas WHERE credito_id=? ORDER BY numero_cuota ASC', [cred.id]);
@@ -609,11 +622,14 @@ app.get('/api/creditos', tenantAuth, async (req, res) => {
       cred.total_pagado = cuotas.reduce((sum, c) => sum + parseFloat(c.pagado||0), 0) + parseFloat(cred.inicial||0);
       cred.saldo_pendiente = parseFloat(cred.total_credito) - cred.total_pagado;
 
-      // Costo de los productos del crédito (según precio de compra actual del catálogo) y
-      // ganancia: la "esperada" es el margen total si se cubre todo el crédito; la
-      // "realizada" es la porción de lo ya abonado que, en orden, supera ese costo (se
-      // asume que los primeros pesos abonados cubren el costo antes de ser utilidad real).
-      cred.costo_total = cred.productos.reduce((sum, p) => sum + (costoMap[String(p.id)] || 0) * (parseInt(p.cantidad) || 0), 0);
+      // Costo del crédito: precio de compra del catálogo para productos, o comisión del
+      // técnico para órdenes de servicio. Ganancia: la "esperada" es el margen total si se
+      // cubre todo el crédito; la "realizada" es la porción de lo ya abonado que, en orden,
+      // supera ese costo (se asume que los primeros pesos abonados cubren el costo antes de
+      // ser utilidad real).
+      cred.costo_total = cred.orden_servicio_id
+        ? (costoOrdenMap[cred.orden_servicio_id] || 0)
+        : cred.productos.reduce((sum, p) => sum + (costoMap[String(p.id)] || 0) * (parseInt(p.cantidad) || 0), 0);
       cred.ganancia_esperada = parseFloat(cred.total_credito) - cred.costo_total;
       cred.ganancia_realizada = Math.max(0, Math.min(cred.total_pagado, parseFloat(cred.total_credito)) - cred.costo_total);
     }
@@ -866,18 +882,460 @@ app.delete('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, r
 });
 
 // ════════════════════════════════
+// TECNICOS
+// ════════════════════════════════
+app.get('/api/tecnicos', tenantAuth, async (req, res) => {
+  try {
+    const { activo } = req.query;
+    let sql = 'SELECT * FROM tecnicos WHERE 1=1';
+    const params = [];
+    if (activo !== undefined) { sql += ' AND activo=?'; params.push(activo === 'true' || activo === '1' ? 1 : 0); }
+    sql += ' ORDER BY nombre ASC';
+    const [rows] = await req.tenantPool.query(sql, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/tecnicos', tenantAuth, async (req, res) => {
+  try {
+    const { id, nombre, telefono, comision_porcentaje } = req.body;
+    if (!id || !nombre) return res.status(400).json({ error: 'Faltan campos' });
+    await req.tenantPool.query(
+      'INSERT INTO tecnicos (id, nombre, telefono, comision_porcentaje, activo) VALUES (?,?,?,?,1)',
+      [id, nombre, telefono || null, comision_porcentaje || 0]
+    );
+    const [rows] = await req.tenantPool.query('SELECT * FROM tecnicos WHERE id=?', [id]);
+    res.status(201).json(rows[0]);
+  } catch(e) {
+    if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'El ID ya existe' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/tecnicos/:id', tenantAuth, async (req, res) => {
+  try {
+    const { nombre, telefono, comision_porcentaje, activo } = req.body;
+    const [old] = await req.tenantPool.query('SELECT id FROM tecnicos WHERE id=?', [req.params.id]);
+    if (!old.length) return res.status(404).json({ error: 'No encontrado' });
+    await req.tenantPool.query(
+      'UPDATE tecnicos SET nombre=?, telefono=?, comision_porcentaje=?, activo=? WHERE id=?',
+      [nombre, telefono || null, comision_porcentaje || 0, (activo === false || activo === 0 || activo === '0') ? 0 : 1, req.params.id]
+    );
+    const [rows] = await req.tenantPool.query('SELECT * FROM tecnicos WHERE id=?', [req.params.id]);
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/tecnicos/:id', tenantAuth, async (req, res) => {
+  try {
+    const [check] = await req.tenantPool.query('SELECT COUNT(*) as cnt FROM orden_prendas WHERE tecnico_id=?', [req.params.id]);
+    if (check[0].cnt > 0) {
+      // Ya tiene historial de prendas asociadas: se desactiva en vez de borrar, para no
+      // perder la trazabilidad de comisiones ya calculadas.
+      await req.tenantPool.query('UPDATE tecnicos SET activo=0 WHERE id=?', [req.params.id]);
+      return res.json({ ok: true, desactivado: true });
+    }
+    await req.tenantPool.query('DELETE FROM tecnicos WHERE id=?', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Resumen de comisiones por técnico: lo ganado en prendas ya entregadas, lo pagado y el
+// saldo (positivo = se le debe, negativo = saldo a favor del taller).
+app.get('/api/tecnicos/resumen', tenantAuth, async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    const [tecnicos] = await req.tenantPool.query('SELECT * FROM tecnicos ORDER BY nombre ASC');
+
+    let ganadoSql = `
+      SELECT op.tecnico_id, SUM(op.comision_monto) as ganado
+      FROM orden_prendas op
+      JOIN ordenes_servicio o ON o.id = op.orden_id
+      WHERE op.tecnico_id IS NOT NULL AND op.estado='entregada' AND o.estado='terminada'`;
+    const gParams = [];
+    if (fecha_inicio && fecha_fin) { ganadoSql += ' AND DATE(o.fecha_entregado) BETWEEN ? AND ?'; gParams.push(fecha_inicio, fecha_fin); }
+    ganadoSql += ' GROUP BY op.tecnico_id';
+    const [ganado] = await req.tenantPool.query(ganadoSql, gParams);
+    const ganadoMap = {};
+    ganado.forEach(g => { ganadoMap[g.tecnico_id] = parseFloat(g.ganado) || 0; });
+
+    let pagadoSql = `SELECT tecnico_id, SUM(monto) as pagado FROM movimientos_caja
+      WHERE tipo='egreso' AND categoria='Pago Técnico' AND tecnico_id IS NOT NULL`;
+    const pParams = [];
+    if (fecha_inicio && fecha_fin) { pagadoSql += ' AND COALESCE(fecha, DATE(created_at)) BETWEEN ? AND ?'; pParams.push(fecha_inicio, fecha_fin); }
+    pagadoSql += ' GROUP BY tecnico_id';
+    const [pagado] = await req.tenantPool.query(pagadoSql, pParams);
+    const pagadoMap = {};
+    pagado.forEach(p => { pagadoMap[p.tecnico_id] = parseFloat(p.pagado) || 0; });
+
+    const resumen = tecnicos.map(t => {
+      const ganada = ganadoMap[t.id] || 0;
+      const pagado2 = pagadoMap[t.id] || 0;
+      return Object.assign({}, t, { comision_ganada: ganada, pagado: pagado2, saldo: ganada - pagado2 });
+    });
+    res.json(resumen);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/tecnicos/:id/pagos', tenantAuth, async (req, res) => {
+  try {
+    const [rows] = await req.tenantPool.query(
+      "SELECT * FROM movimientos_caja WHERE tecnico_id=? AND categoria='Pago Técnico' ORDER BY COALESCE(fecha, DATE(created_at)) DESC, created_at DESC",
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Registrar un pago (liquidación semanal) a un técnico, con fecha exacta
+app.post('/api/tecnicos/:id/pagos', tenantAuth, async (req, res) => {
+  try {
+    const { monto, metodo_pago, fecha, observaciones } = req.body;
+    if (!monto || parseFloat(monto) <= 0) return res.status(400).json({ error: 'Monto inválido' });
+    const [[tec]] = await req.tenantPool.query('SELECT id FROM tecnicos WHERE id=?', [req.params.id]);
+    if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
+    const [result] = await req.tenantPool.query(
+      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, tecnico_id, fecha) VALUES ("egreso","Pago Técnico",?,?,?,?,?)',
+      [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || '', req.params.id, fecha || null]
+    );
+    res.status(201).json({ ok: true, id: result.insertId });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════
+// ORDENES DE SERVICIO (sastrería: reparación / diseño de prendas)
+// ════════════════════════════════
+
+async function cargarOrdenCompleta(pool, ordenId) {
+  const [[orden]] = await pool.query('SELECT * FROM ordenes_servicio WHERE id=?', [ordenId]);
+  if (!orden) return null;
+  const [prendas] = await pool.query('SELECT * FROM orden_prendas WHERE orden_id=? ORDER BY id ASC', [ordenId]);
+  orden.prendas = prendas;
+  const [[abonos]] = await pool.query(
+    "SELECT COALESCE(SUM(monto),0) as total FROM movimientos_caja WHERE orden_servicio_id=? AND tipo='ingreso'",
+    [ordenId]
+  );
+  orden.abonado = parseFloat(abonos.total) || 0;
+  orden.saldo = parseFloat(orden.total) - orden.abonado;
+  return orden;
+}
+
+function construirPrendaInsert(p, comisionDefaultMap) {
+  const precio = parseFloat(p.precio) || 0;
+  const comisionPct = p.comision_porcentaje != null && p.comision_porcentaje !== ''
+    ? parseFloat(p.comision_porcentaje)
+    : (comisionDefaultMap[p.tecnico_id] || 0);
+  const comisionMonto = precio * comisionPct / 100;
+  return { precio, comisionPct, comisionMonto };
+}
+
+app.get('/api/ordenes', tenantAuth, async (req, res) => {
+  try {
+    const { estado, tecnico_id, cliente_id, monto_min, monto_max, busqueda } = req.query;
+    let sql = 'SELECT DISTINCT o.* FROM ordenes_servicio o';
+    const where = [];
+    const params = [];
+    if (tecnico_id) {
+      sql += ' JOIN orden_prendas op ON op.orden_id = o.id';
+      where.push('op.tecnico_id=?'); params.push(tecnico_id);
+    }
+    if (estado) { where.push('o.estado=?'); params.push(estado); }
+    if (cliente_id) { where.push('o.cliente_id=?'); params.push(cliente_id); }
+    if (monto_min) { where.push('o.total >= ?'); params.push(parseFloat(monto_min)); }
+    if (monto_max) { where.push('o.total <= ?'); params.push(parseFloat(monto_max)); }
+    if (busqueda) { where.push('(o.folio LIKE ? OR o.cliente LIKE ?)'); params.push('%'+busqueda+'%','%'+busqueda+'%'); }
+    if (where.length) sql += ' WHERE ' + where.join(' AND ');
+    sql += ' ORDER BY o.created_at DESC';
+    const [ordenes] = await req.tenantPool.query(sql, params);
+
+    if (ordenes.length) {
+      const ids = ordenes.map(o => o.id);
+      const [prendas] = await req.tenantPool.query('SELECT * FROM orden_prendas WHERE orden_id IN (?)', [ids]);
+      const porOrden = {};
+      prendas.forEach(p => { (porOrden[p.orden_id] = porOrden[p.orden_id] || []).push(p); });
+      const [abonos] = await req.tenantPool.query(
+        "SELECT orden_servicio_id, SUM(monto) as total FROM movimientos_caja WHERE orden_servicio_id IN (?) AND tipo='ingreso' GROUP BY orden_servicio_id",
+        [ids]
+      );
+      const abonoMap = {};
+      abonos.forEach(a => { abonoMap[a.orden_servicio_id] = parseFloat(a.total) || 0; });
+      ordenes.forEach(o => {
+        o.prendas = porOrden[o.id] || [];
+        o.abonado = abonoMap[o.id] || 0;
+        o.saldo = parseFloat(o.total) - o.abonado;
+      });
+    }
+    res.json(ordenes);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/ordenes/:id', tenantAuth, async (req, res) => {
+  try {
+    const orden = await cargarOrdenCompleta(req.tenantPool, req.params.id);
+    if (!orden) return res.status(404).json({ error: 'No encontrada' });
+    res.json(orden);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Crear orden (recepción de la(s) prenda(s)). Opcionalmente registra el abono que deja
+// el cliente en ese momento.
+app.post('/api/ordenes', tenantAuth, async (req, res) => {
+  const conn = await req.tenantPool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const { folio, cliente_id, cliente, fecha_recibido, fecha_entrega_estimada, observaciones, prendas, abono_inicial, metodos_pago } = req.body;
+    if (!folio || !cliente_id || !fecha_recibido || !Array.isArray(prendas) || !prendas.length) {
+      await conn.rollback(); conn.release();
+      return res.status(400).json({ error: 'Faltan campos obligatorios (folio, cliente, fecha, al menos una prenda)' });
+    }
+
+    const tecIds = [...new Set(prendas.map(p => p.tecnico_id).filter(Boolean))];
+    let comisionDefault = {};
+    if (tecIds.length) {
+      const [tecs] = await conn.query('SELECT id, comision_porcentaje FROM tecnicos WHERE id IN (?)', [tecIds]);
+      tecs.forEach(t => { comisionDefault[t.id] = parseFloat(t.comision_porcentaje) || 0; });
+    }
+
+    let total = 0;
+    prendas.forEach(p => { total += parseFloat(p.precio) || 0; });
+
+    const [result] = await conn.query(
+      'INSERT INTO ordenes_servicio (folio, cliente_id, cliente, fecha_recibido, fecha_entrega_estimada, observaciones, estado, total) VALUES (?,?,?,?,?,?,"cotizacion",?)',
+      [folio, cliente_id, cliente || '', fecha_recibido, fecha_entrega_estimada || null, observaciones || '', total]
+    );
+    const ordenId = result.insertId;
+
+    for (const p of prendas) {
+      const { precio, comisionPct, comisionMonto } = construirPrendaInsert(p, comisionDefault);
+      await conn.query(
+        `INSERT INTO orden_prendas (orden_id, tipo_prenda, tipo_trabajo, descripcion, observaciones, precio, tecnico_id, comision_porcentaje, comision_monto, estado)
+         VALUES (?,?,?,?,?,?,?,?,?,"en_taller")`,
+        [ordenId, p.tipo_prenda || 'Prenda', p.tipo_trabajo || 'reparacion', p.descripcion || '', p.observaciones || '', precio, p.tecnico_id || null, comisionPct, comisionMonto]
+      );
+    }
+
+    if (abono_inicial && parseFloat(abono_inicial) > 0) {
+      const metodos = (metodos_pago || []).filter(m => parseFloat(m.monto) > 0);
+      if (metodos.length) {
+        for (const m of metodos) {
+          await conn.query(
+            'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id) VALUES ("ingreso","Abono Orden Servicio",?,?,?,?,?)',
+            [parseFloat(m.monto), m.metodo || 'Efectivo', 'Abono al recibir orden ' + folio, cliente_id, ordenId]
+          );
+        }
+      } else {
+        await conn.query(
+          'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id) VALUES ("ingreso","Abono Orden Servicio",?,?,?,?,?)',
+          [parseFloat(abono_inicial), 'Efectivo', 'Abono al recibir orden ' + folio, cliente_id, ordenId]
+        );
+      }
+    }
+
+    await conn.commit(); conn.release();
+    const orden = await cargarOrdenCompleta(req.tenantPool, ordenId);
+    res.status(201).json(orden);
+  } catch(e) {
+    await conn.rollback(); conn.release();
+    if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Folio duplicado' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Editar datos/prendas de una orden que aún está en Cotización (no liquidada)
+app.put('/api/ordenes/:id', tenantAuth, async (req, res) => {
+  const conn = await req.tenantPool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query('SELECT * FROM ordenes_servicio WHERE id=?', [req.params.id]);
+    if (!orden) { await conn.rollback(); conn.release(); return res.status(404).json({ error: 'No encontrada' }); }
+    if (orden.estado !== 'cotizacion') { await conn.rollback(); conn.release(); return res.status(409).json({ error: 'Solo se puede editar una orden en estado Cotización' }); }
+
+    const { fecha_entrega_estimada, observaciones, prendas } = req.body;
+    await conn.query('UPDATE ordenes_servicio SET fecha_entrega_estimada=?, observaciones=? WHERE id=?',
+      [fecha_entrega_estimada || null, observaciones || '', req.params.id]);
+
+    if (Array.isArray(prendas) && prendas.length) {
+      const tecIds = [...new Set(prendas.map(p => p.tecnico_id).filter(Boolean))];
+      let comisionDefault = {};
+      if (tecIds.length) {
+        const [tecs] = await conn.query('SELECT id, comision_porcentaje FROM tecnicos WHERE id IN (?)', [tecIds]);
+        tecs.forEach(t => { comisionDefault[t.id] = parseFloat(t.comision_porcentaje) || 0; });
+      }
+      await conn.query('DELETE FROM orden_prendas WHERE orden_id=?', [req.params.id]);
+      let total = 0;
+      for (const p of prendas) {
+        const { precio, comisionPct, comisionMonto } = construirPrendaInsert(p, comisionDefault);
+        total += precio;
+        await conn.query(
+          `INSERT INTO orden_prendas (orden_id, tipo_prenda, tipo_trabajo, descripcion, observaciones, precio, tecnico_id, comision_porcentaje, comision_monto, estado)
+           VALUES (?,?,?,?,?,?,?,?,?,"en_taller")`,
+          [req.params.id, p.tipo_prenda || 'Prenda', p.tipo_trabajo || 'reparacion', p.descripcion || '', p.observaciones || '', precio, p.tecnico_id || null, comisionPct, comisionMonto]
+        );
+      }
+      await conn.query('UPDATE ordenes_servicio SET total=? WHERE id=?', [total, req.params.id]);
+    }
+
+    await conn.commit(); conn.release();
+    const orden2 = await cargarOrdenCompleta(req.tenantPool, req.params.id);
+    res.json(orden2);
+  } catch(e) {
+    await conn.rollback(); conn.release();
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/ordenes/:id/anular', tenantAuth, async (req, res) => {
+  try {
+    const [[orden]] = await req.tenantPool.query('SELECT estado FROM ordenes_servicio WHERE id=?', [req.params.id]);
+    if (!orden) return res.status(404).json({ error: 'No encontrada' });
+    if (orden.estado !== 'cotizacion') return res.status(409).json({ error: 'Solo se puede anular una orden en estado Cotización' });
+    await req.tenantPool.query('UPDATE ordenes_servicio SET estado="anulada" WHERE id=?', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Liquidar / entregar: cobra lo que falte (todo o en parte, financiando el resto igual que
+// un crédito normal) y genera la venta con el folio definitivo de la orden.
+app.post('/api/ordenes/:id/liquidar', tenantAuth, async (req, res) => {
+  const conn = await req.tenantPool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[orden]] = await conn.query('SELECT * FROM ordenes_servicio WHERE id=?', [req.params.id]);
+    if (!orden) { await conn.rollback(); conn.release(); return res.status(404).json({ error: 'No encontrada' }); }
+    if (orden.estado !== 'cotizacion') { await conn.rollback(); conn.release(); return res.status(409).json({ error: 'Esta orden ya fue liquidada o está anulada' }); }
+
+    const [prendas] = await conn.query('SELECT * FROM orden_prendas WHERE orden_id=?', [req.params.id]);
+    if (!prendas.length) { await conn.rollback(); conn.release(); return res.status(409).json({ error: 'La orden no tiene prendas' }); }
+
+    const [[abonoRow]] = await conn.query(
+      "SELECT COALESCE(SUM(monto),0) as total FROM movimientos_caja WHERE orden_servicio_id=? AND tipo='ingreso'",
+      [req.params.id]
+    );
+    const abonadoPrevio = parseFloat(abonoRow.total) || 0;
+    const total = parseFloat(orden.total);
+
+    const { metodos_pago, folio_venta, fecha, hora, num_cuotas, frecuencia } = req.body;
+    const metodosAhora = (metodos_pago || []).filter(m => parseFloat(m.monto) > 0);
+    const montoAhora = metodosAhora.reduce((s, m) => s + parseFloat(m.monto), 0);
+
+    const totalCobrado = abonadoPrevio + montoAhora;
+    const saldoRestante = total - totalCobrado;
+
+    if (saldoRestante > 0.5 && (!num_cuotas || parseInt(num_cuotas) < 1)) {
+      await conn.rollback(); conn.release();
+      return res.status(409).json({ error: 'Queda saldo pendiente de $' + saldoRestante.toFixed(2) + '; indica a cuántas cuotas se financia' });
+    }
+
+    const prendasJson = prendas.map(p => ({ id: 'PRENDA-' + p.id, nombre: p.tipo_prenda + (p.descripcion ? ' - ' + p.descripcion : ''), precio: parseFloat(p.precio), cantidad: 1 }));
+
+    const fechaVenta = fecha || new Date().toISOString().slice(0,10);
+    const horaVenta = hora || new Date().toTimeString().slice(0,8);
+    const folio = folio_venta || ('VENTA-' + fechaVenta.replace(/-/g,'') + '-ORD' + req.params.id);
+
+    let creditoId = null;
+    const esCredito = saldoRestante > 0.5;
+
+    if (esCredito) {
+      const [credResult] = await conn.query(
+        `INSERT INTO creditos (cliente_id, precio_contado, porcentaje_recargo, total_credito, inicial, num_cuotas, frecuencia, fecha_inicio, estado, productos_cotizados, orden_servicio_id)
+         VALUES (?,?,0,?,?,?,?,?,"activo",?,?)`,
+        [orden.cliente_id, total, total, totalCobrado, parseInt(num_cuotas), frecuencia || 'quincenal', fechaVenta, JSON.stringify(prendasJson), req.params.id]
+      );
+      creditoId = credResult.insertId;
+
+      let valorCuota = saldoRestante / parseInt(num_cuotas);
+      for (let i = 1; i <= parseInt(num_cuotas); i++) {
+        let d = new Date(fechaVenta);
+        if (frecuencia === 'mensual') d.setMonth(d.getMonth() + i);
+        else if (frecuencia === 'semanal') d.setDate(d.getDate() + (i * 7));
+        else d.setDate(d.getDate() + (i * 15));
+        await conn.query('INSERT INTO credito_cuotas (credito_id, numero_cuota, fecha_vence, valor, pagado) VALUES (?,?,?,?,0)',
+          [creditoId, i, d.toISOString().split('T')[0], valorCuota]);
+      }
+    }
+
+    const metodosParaVenta = metodosAhora.map(m => ({ metodo: m.metodo, monto: parseFloat(m.monto) }));
+    const metodoPagoStr = metodosParaVenta.map(m => m.metodo).join(' + ') || (esCredito ? 'Crédito' : 'Efectivo');
+
+    const [ventaResult] = await conn.query(
+      `INSERT INTO ventas (folio, fecha, hora, cliente, cliente_id, observaciones, metodo_pago, metodos_pago, total, cambio, estado, estado_pago, credito_id, orden_servicio_id)
+       VALUES (?,?,?,?,?,?,?,?,?,0,"aceptada",?,?,?)`,
+      [folio, fechaVenta, horaVenta, orden.cliente, orden.cliente_id, orden.observaciones || '', metodoPagoStr, JSON.stringify(metodosParaVenta), total, esCredito ? 'credito' : 'contado', creditoId, req.params.id]
+    );
+    const ventaId = ventaResult.insertId;
+
+    for (const p of prendasJson) {
+      await conn.query('INSERT INTO venta_productos (venta_id, producto_id, nombre, cantidad, precio_unitario, subtotal) VALUES (?,?,?,?,?,?)',
+        [ventaId, p.id, p.nombre, 1, p.precio, p.precio]);
+    }
+
+    if (esCredito) {
+      await conn.query('UPDATE creditos SET venta_id=? WHERE id=?', [ventaId, creditoId]);
+    }
+
+    // Registrar el cobro de HOY (el abono previo, si lo hubo, ya quedó registrado al recibir la orden)
+    for (const m of metodosAhora) {
+      await conn.query(
+        'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id, orden_servicio_id) VALUES ("ingreso",?,?,?,?,?,?,?)',
+        [esCredito ? 'Abono Inicial' : 'Pago Orden Servicio', parseFloat(m.monto), m.metodo || 'Efectivo', 'Pago al entregar orden ' + orden.folio, orden.cliente_id, creditoId, req.params.id]
+      );
+    }
+
+    await conn.query('UPDATE orden_prendas SET estado="entregada" WHERE orden_id=?', [req.params.id]);
+    await conn.query('UPDATE ordenes_servicio SET estado="terminada", venta_id=?, credito_id=?, fecha_entregado=NOW() WHERE id=?',
+      [ventaId, creditoId, req.params.id]);
+
+    await conn.commit(); conn.release();
+    const ordenFinal = await cargarOrdenCompleta(req.tenantPool, req.params.id);
+    res.json(ordenFinal);
+  } catch(e) {
+    await conn.rollback(); conn.release();
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ════════════════════════════════
 // MOVIMIENTOS E INFORME
 // ════════════════════════════════
 app.post('/api/movimientos', tenantAuth, async (req, res) => {
   try {
-    const { tipo, categoria, monto, metodo_pago, observaciones } = req.body;
+    const { tipo, categoria, monto, metodo_pago, observaciones, fecha } = req.body;
     if(!tipo || !categoria || !monto) return res.status(400).json({ error: 'Faltan campos' });
-    
+
     const [result] = await req.tenantPool.query(
-      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones) VALUES (?,?,?,?,?)',
-      [tipo, categoria, monto, metodo_pago||'Efectivo', observaciones||'']
+      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, fecha) VALUES (?,?,?,?,?,?)',
+      [tipo, categoria, monto, metodo_pago||'Efectivo', observaciones||'', fecha||null]
     );
     res.json({ ok: true, id: result.insertId });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Listado de movimientos de caja (usado por "Otros Egresos" para ver los gastos del día,
+// y en general para cualquier ingreso/egreso suelto con filtros de fecha/tipo/categoría).
+app.get('/api/movimientos', tenantAuth, async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin, tipo, categoria } = req.query;
+    let sql = 'SELECT * FROM movimientos_caja WHERE 1=1';
+    const params = [];
+    if (fecha_inicio && fecha_fin) { sql += ' AND COALESCE(fecha, DATE(created_at)) BETWEEN ? AND ?'; params.push(fecha_inicio, fecha_fin); }
+    if (tipo) { sql += ' AND tipo=?'; params.push(tipo); }
+    if (categoria) { sql += ' AND categoria=?'; params.push(categoria); }
+    sql += ' ORDER BY COALESCE(fecha, DATE(created_at)) DESC, created_at DESC';
+    const [rows] = await req.tenantPool.query(sql, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Borra un movimiento suelto (gasto del día o pago a técnico mal registrado). No se puede
+// borrar por aquí un movimiento que pertenece a un crédito/orden, porque esos ya tienen su
+// propio flujo de edición/eliminación de abonos.
+app.delete('/api/movimientos/:id', tenantAuth, async (req, res) => {
+  try {
+    const [[mov]] = await req.tenantPool.query('SELECT * FROM movimientos_caja WHERE id=?', [req.params.id]);
+    if (!mov) return res.status(404).json({ error: 'No encontrado' });
+    if (mov.credito_id || mov.orden_servicio_id) return res.status(409).json({ error: 'Este movimiento está asociado a un crédito/orden y no puede eliminarse desde aquí' });
+    await req.tenantPool.query('DELETE FROM movimientos_caja WHERE id=?', [req.params.id]);
+    res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1085,6 +1543,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         estado ENUM('aceptada','anulada') DEFAULT 'aceptada',
         estado_pago ENUM('contado','credito') DEFAULT 'contado',
         credito_id INT NULL,
+        orden_servicio_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS venta_productos (
@@ -1127,6 +1586,9 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         observaciones TEXT,
         cliente_id VARCHAR(50) NULL,
         credito_id INT NULL,
+        tecnico_id VARCHAR(50) NULL,
+        orden_servicio_id INT NULL,
+        fecha DATE NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS creditos (
@@ -1142,6 +1604,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         fecha_inicio DATE NULL,
         estado ENUM('aprobado','activo','pagado','anulado') DEFAULT 'aprobado',
         productos_cotizados JSON NULL,
+        orden_servicio_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS credito_cuotas (
@@ -1152,6 +1615,44 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         valor DECIMAL(10,2) NOT NULL,
         pagado DECIMAL(10,2) DEFAULT 0,
         FOREIGN KEY (credito_id) REFERENCES creditos(id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS tecnicos (
+        id VARCHAR(50) PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        telefono VARCHAR(50),
+        comision_porcentaje DECIMAL(5,2) NOT NULL DEFAULT 0,
+        activo BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS ordenes_servicio (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        folio VARCHAR(50) NOT NULL UNIQUE,
+        cliente_id VARCHAR(50) NOT NULL,
+        cliente VARCHAR(150),
+        fecha_recibido DATE NOT NULL,
+        fecha_entrega_estimada DATE NULL,
+        fecha_entregado DATETIME NULL,
+        observaciones TEXT,
+        estado ENUM('cotizacion','terminada','anulada') NOT NULL DEFAULT 'cotizacion',
+        total DECIMAL(10,2) NOT NULL DEFAULT 0,
+        venta_id INT NULL,
+        credito_id INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS orden_prendas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        orden_id INT NOT NULL,
+        tipo_prenda VARCHAR(100) NOT NULL,
+        tipo_trabajo ENUM('reparacion','diseno','otro') NOT NULL DEFAULT 'reparacion',
+        descripcion TEXT,
+        observaciones TEXT,
+        precio DECIMAL(10,2) NOT NULL DEFAULT 0,
+        tecnico_id VARCHAR(50) NULL,
+        comision_porcentaje DECIMAL(5,2) NOT NULL DEFAULT 0,
+        comision_monto DECIMAL(10,2) NOT NULL DEFAULT 0,
+        estado ENUM('en_taller','lista','entregada') NOT NULL DEFAULT 'en_taller',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (orden_id) REFERENCES ordenes_servicio(id) ON DELETE CASCADE
       );
       INSERT IGNORE INTO configuracion (id, nombre_negocio, metodos_pago) VALUES (1, ?, '["Efectivo","Tarjeta débito","Tarjeta crédito","Transferencia","Otro"]');
       INSERT IGNORE INTO clientes (id, nombre) VALUES ('222222', 'CLIENTE POS');

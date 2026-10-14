@@ -83,6 +83,7 @@
       <label class="checkbox-group"><input type="checkbox" id="m-cartera" checked> Cartera / Créditos</label>
       <label class="checkbox-group"><input type="checkbox" id="m-finanzas" checked> Finanzas / Informes</label>
       <label class="checkbox-group"><input type="checkbox" id="m-config" checked> Configuración</label>
+      <label class="checkbox-group"><input type="checkbox" id="m-ordenes"> Órdenes de Servicio (sastrería)</label>
     </div>
 
     <div style="margin-top: 15px; display:flex; align-items:center; gap: 20px;">
@@ -232,6 +233,9 @@ function editTenant(t) {
   ['pos','productos','clientes','cartera','finanzas','config'].forEach(m => {
     document.getElementById('m-'+m).checked = mods[m] !== false; // Si no existe, por defecto true
   });
+  // Órdenes de Servicio es al revés: si no existe la llave, por defecto apagado (es un
+  // módulo nuevo y específico de talleres de confección, no algo que todo tenant necesite).
+  document.getElementById('m-ordenes').checked = mods['ordenes'] === true;
 }
 
 async function toggleStatus(id, currentStatus) {
@@ -277,7 +281,8 @@ async function saveTenant() {
       clientes: document.getElementById('m-clientes').checked,
       cartera: document.getElementById('m-cartera').checked,
       finanzas: document.getElementById('m-finanzas').checked,
-      config: document.getElementById('m-config').checked
+      config: document.getElementById('m-config').checked,
+      ordenes: document.getElementById('m-ordenes').checked
     }
   };
 
