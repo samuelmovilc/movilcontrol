@@ -22,8 +22,7 @@
   --radius:8px;--radius-sm:5px;--font:'Segoe UI',system-ui,sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{height:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
-body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;min-height:100vh;height:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;min-height:100vh}
 .app-header{background:var(--electric);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:50px;box-shadow:0 2px 12px rgba(0,102,255,.35);position:sticky;top:0;z-index:100}
 .app-logo{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
 .app-tabs{display:flex;gap:2px;background:rgba(255,255,255,.12);border-radius:6px;padding:3px}
@@ -313,15 +312,18 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     -webkit-overflow-scrolling: touch;
     padding-bottom: 5px;
   }
-  /* Tablas SIN alto fijo (Cartera, Órdenes, Egresos, Caja, etc.): el scroll
-     vertical debe quedar siempre en manos de la página, nunca "atrapado"
-     por este contenedor (overflow-y:auto heredado + overflow-x:auto +
-     -webkit-overflow-scrolling:touch podían bloquear el scroll al tacto
-     justo al llegar a la tabla). Las tablas .tbl-wrap-capped (con su
-     propio max-height) mantienen su scroll interno normal. */
+  /* Tablas SIN alto fijo (Cartera, Órdenes, Egresos, Caja, etc.): el dedo
+     debe poder deslizar la tabla de lado a lado (para ver columnas que no
+     caben) SIN que ese gesto "secuestre" el scroll vertical de toda la
+     página. touch-action:pan-x le dice al navegador que este contenedor
+     solo maneja gestos horizontales; cualquier componente vertical del
+     gesto se le pasa de inmediato a la página. Las tablas .tbl-wrap-capped
+     (con su propio max-height) conservan su scroll interno normal en
+     ambos ejes. */
   .tbl-wrap:not(.tbl-wrap-capped) {
     overflow-y: visible !important;
     -webkit-overflow-scrolling: auto;
+    touch-action: pan-x;
   }
   .tbl-wrap table {
     width: 100%;
