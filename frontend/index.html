@@ -1547,7 +1547,11 @@ function showLoading(msg){
 }
 function hideLoading(){document.getElementById('loading').classList.remove('show')}
 async function apiGet(url){
-  var r=await fetch(API_BASE+url, {headers: getSaasHeaders()});
+  // cache:'no-store' evita que el navegador (sobre todo en móvil) devuelva
+  // una respuesta vieja cacheada en vez de ir siempre al servidor; esto es
+  // clave para que botones de "Actualizar" (Cartera, etc.) muestren datos
+  // realmente frescos.
+  var r=await fetch(API_BASE+url, {headers: getSaasHeaders(), cache: 'no-store'});
   if(r.status===401) { saasLogout(); return; }
   if(!r.ok)throw new Error('Error '+r.status);
   return r.json();
