@@ -312,6 +312,15 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     -webkit-overflow-scrolling: touch;
     padding-bottom: 5px;
   }
+  /* Tablas SIN alto fijo (Cartera, Órdenes, Egresos, Caja, etc.): el scroll
+     vertical debe quedar siempre en manos de la página, nunca "atrapado"
+     por este contenedor (overflow-y:auto heredado + overflow-x:auto +
+     -webkit-overflow-scrolling:touch podían bloquear el scroll al tacto
+     justo al llegar a la tabla). Las tablas .tbl-wrap-capped (con su
+     propio max-height) mantienen su scroll interno normal. */
+  .tbl-wrap:not(.tbl-wrap-capped) {
+    overflow-y: visible;
+  }
   .tbl-wrap table {
     width: 100%;
   }
@@ -749,7 +758,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     &nbsp;<a href="#" onclick="downloadTemplate();return false" style="color:var(--red);text-decoration:underline;font-weight:700">📥 Descargar plantilla</a></div>
   </div>
   <div class="card">
-    <div class="tbl-wrap" style="max-height:340px">
+    <div class="tbl-wrap tbl-wrap-capped" style="max-height:340px">
       <table><thead><tr>
         <th><input type="checkbox" id="select-all-chk" onchange="toggleSelectAll(this.checked)"></th>
         <th>Código</th><th>Img</th><th>Nombre</th><th>P.Venta</th><th>P.Compra</th>
@@ -1035,7 +1044,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         </div>
         
         <h4 style="margin-bottom:8px;color:var(--electric)"><i class="fa-solid fa-calendar-days"></i> Tabla de Cuotas</h4>
-        <div class="tbl-wrap" style="max-height:250px;border:1px solid var(--border)">
+        <div class="tbl-wrap tbl-wrap-capped" style="max-height:250px;border:1px solid var(--border)">
           <table style="width:100%;text-align:left">
             <thead style="background:var(--surface2)">
               <tr><th>N°</th><th>Vencimiento</th><th>Valor</th><th>Pagado</th><th>Estado</th></tr>
@@ -4125,7 +4134,7 @@ async function loadInforme() {
       <div style="display:grid;grid-template-columns:1fr;gap:20px">
         <div class="card" style="margin:0">
           <h4 style="margin-bottom:10px;color:var(--electric)">1. Total Ventas por Producto</h4>
-          <div class="tbl-wrap" style="max-height:200px">${htmlProds}</div>
+          <div class="tbl-wrap tbl-wrap-capped" style="max-height:200px">${htmlProds}</div>
         </div>
       </div>
       
