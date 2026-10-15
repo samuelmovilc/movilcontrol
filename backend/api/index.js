@@ -759,9 +759,12 @@ app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
     }
     const cred = creditos[0];
 
-    if (cred.estado === 'anulado' || cred.estado === 'pagado') {
+    // Regla de negocio: solo los créditos en estado "activo" admiten abonos.
+    // Un crédito "aprobado" es apenas una cotización/plan apartado (sin
+    // cuotas todavía) y "pagado"/"anulado" ya están cerrados.
+    if (cred.estado !== 'activo') {
        await conn.rollback(); conn.release();
-       return res.status(409).json({ error: 'No se pueden registrar abonos en un crédito ' + cred.estado });
+       return res.status(409).json({ error: 'Solo los créditos Activos permiten registrar abonos (este está "' + cred.estado + '")' });
     }
 
     // Aplicar monto a las cuotas vencidas/pendientes en orden. Ese inicial es el que usa

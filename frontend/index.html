@@ -1098,13 +1098,16 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           </div>
         </div>
 
-        <div class="card" style="margin:0;padding:12px;background:var(--surface2);display:flex;flex-direction:column;gap:12px">
+        <div class="card" id="cartera-abono-form-card" style="margin:0;padding:12px;background:var(--surface2);display:flex;flex-direction:column;gap:12px">
           <h4 id="cartera-abono-form-title" style="margin-bottom:-4px;color:var(--electric)"><i class="fa-solid fa-money-bill-transfer"></i> Registrar Abono</h4>
           <div class="form-group"><label>Monto a Abonar</label><input type="number" id="cartera-abono-monto" placeholder="0.00"></div>
           <div class="form-group"><label>Método de Pago</label><select id="cartera-abono-metodo"></select></div>
           <div class="form-group"><label>Observaciones</label><input type="text" id="cartera-abono-obs" placeholder="Opcional"></div>
           <button class="btn btn-primary" id="cartera-abono-submit-btn" onclick="registrarAbonoCartera()" style="width:100%;justify-content:center;padding:10px 15px;margin-top:4px"><i class="fa-solid fa-check"></i> Aplicar Abono</button>
           <button class="btn btn-secondary" id="cartera-abono-cancel-btn" onclick="cancelarEdicionAbono()" style="width:100%;justify-content:center;display:none"><i class="fa-solid fa-xmark"></i> Cancelar edición</button>
+        </div>
+        <div class="card" id="cartera-abono-bloqueado-aviso" style="margin:0;padding:12px;background:var(--surface2);display:none;color:var(--text-light);font-size:11.5px;text-align:center">
+          <i class="fa-solid fa-circle-info"></i> Solo los créditos <b>Activos</b> permiten registrar abonos.
         </div>
       </div>
     </div>
@@ -3778,7 +3781,7 @@ async function loadCartera() {
         '<td><span ' + badgeClass + '>' + (c.estado||'').toUpperCase() + '</span></td>' +
         '<td>' +
            '<button class="btn btn-secondary btn-xs" onclick="verDetalleCredito(' + c.id + ')"><i class="fa-solid fa-eye"></i> Detalle</button>' +
-           ((c.estado === 'activo' || c.estado === 'aprobado') ? ' <button class="btn btn-primary btn-xs" onclick="abrirAbonoRapido(' + c.id + ')"><i class="fa-solid fa-money-bill-wave"></i> Abonar</button>' : '') +
+           (c.estado === 'activo' ? ' <button class="btn btn-primary btn-xs" onclick="abrirAbonoRapido(' + c.id + ')"><i class="fa-solid fa-money-bill-wave"></i> Abonar</button>' : '') +
            (c.estado === 'aprobado' ? ' <button class="btn btn-danger btn-xs" onclick="anularCotizacion(' + c.id + ')"><i class="fa-solid fa-ban"></i> Anular</button>' : '') +
         '</td>' +
       '</tr>';
@@ -3925,6 +3928,13 @@ async function verDetalleCredito(id) {
     currentCarteraAbonos = cred.abonos || [];
     renderAbonosList();
     cancelarEdicionAbono();
+
+    // Regla: solo los créditos Activos permiten registrar abonos.
+    var formCard = document.getElementById('cartera-abono-form-card');
+    var avisoCard = document.getElementById('cartera-abono-bloqueado-aviso');
+    var esActivo = cred.estado === 'activo';
+    if (formCard) formCard.style.display = esActivo ? '' : 'none';
+    if (avisoCard) avisoCard.style.display = esActivo ? 'none' : '';
 
     openModal('modal-cartera-detalle');
   } catch(e) {
