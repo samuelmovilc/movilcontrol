@@ -523,7 +523,29 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 }
 
 @media(max-width:900px){
-  .cartera-summary-grid { grid-template-columns: 1fr !important; }
+  /* Título "Gestión de Cartera y Créditos" oculto en móvil para subir las
+     tarjetas y dejar más espacio visible a la tabla de créditos. */
+  #module-cartera > .section-title { display: none; }
+
+  /* Tarjetas de resumen: 2 por fila, más pequeñas, y reordenadas con
+     Total Cartera/Total Pendiente arriba, Ganancia Esperada/Realizada en
+     medio, y Total Recaudado (con su desglose por método) abajo, a lo
+     ancho. */
+  .cartera-summary-grid { grid-template-columns: 1fr 1fr !important; gap: 8px; margin-bottom: 10px; }
+  .cartera-card.total { order: 1; }
+  .cartera-card.saldo { order: 2; }
+  .cartera-card.ganancia-esp { order: 3; }
+  .cartera-card.ganancia-real { order: 4; }
+  .cartera-card.abonos { order: 5; grid-column: 1 / -1; }
+
+  .cartera-card { padding: 9px; gap: 8px; }
+  .cartera-card .c-icon { width: 28px; height: 28px; font-size: 13px; flex-shrink: 0; }
+  .cartera-card .c-info h4 { font-size: 8.5px; margin-bottom: 2px; }
+  .cartera-card .c-info .c-val { font-size: 14px; }
+  .cartera-card .c-subtext { font-size: 8px; margin-top: 1px; }
+  .c-breakdown { margin-top: 5px; padding-top: 5px; gap: 2px; }
+  .c-breakdown-row { font-size: 9.5px; }
+
   .cartera-btn-group { flex-wrap: wrap; }
   .cartera-client-select { min-width: 100%; width: 100%; margin-top: 5px; }
   .cartera-filters-bar { flex-direction: column; align-items: stretch; }
