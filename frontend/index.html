@@ -22,7 +22,8 @@
   --radius:8px;--radius-sm:5px;--font:'Segoe UI',system-ui,sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;min-height:100vh}
+html{height:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;min-height:100vh;height:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .app-header{background:var(--electric);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:50px;box-shadow:0 2px 12px rgba(0,102,255,.35);position:sticky;top:0;z-index:100}
 .app-logo{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
 .app-tabs{display:flex;gap:2px;background:rgba(255,255,255,.12);border-radius:6px;padding:3px}
@@ -319,7 +320,8 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
      justo al llegar a la tabla). Las tablas .tbl-wrap-capped (con su
      propio max-height) mantienen su scroll interno normal. */
   .tbl-wrap:not(.tbl-wrap-capped) {
-    overflow-y: visible;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: auto;
   }
   .tbl-wrap table {
     width: 100%;
