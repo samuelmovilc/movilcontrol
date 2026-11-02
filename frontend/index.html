@@ -1165,8 +1165,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <div class="modal-header"><span><i class="fa-solid fa-tag"></i> Configurar Etiquetas</span><button class="modal-close" onclick="closeModal('modal-etiquetas')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body">
       <div class="lbl-cfg-grid" style="margin-bottom:12px; grid-template-columns: 1fr 1fr;">
-        <div class="form-group"><label>Ancho (mm)</label><input type="number" id="lbl-w-mm" value="50" step="1" oninput="updateLabelPreview()"></div>
-        <div class="form-group"><label>Alto (mm)</label><input type="number" id="lbl-h-mm" value="25" step="1" oninput="updateLabelPreview()"></div>
+        <div class="form-group"><label>Ancho Pág. (mm)</label><input type="number" id="lbl-page-w" value="100" step="1" oninput="updateLabelPreview()" placeholder="Auto"></div>
+        <div class="form-group"><label>Alto Pág. (mm)</label><input type="number" id="lbl-page-h" value="25" step="1" oninput="updateLabelPreview()" placeholder="Auto"></div>
+        <div class="form-group"><label>Ancho Etiqueta (mm)</label><input type="number" id="lbl-w-mm" value="31" step="1" oninput="updateLabelPreview()"></div>
+        <div class="form-group"><label>Alto Etiqueta (mm)</label><input type="number" id="lbl-h-mm" value="25" step="1" oninput="updateLabelPreview()"></div>
         <div class="form-group"><label>Separaci&oacute;n vertical (mm)</label><input type="number" id="lbl-gap-v" value="3" step="1" oninput="updateLabelPreview()"></div>
         <div class="form-group"><label>Separaci&oacute;n horizontal (mm)</label><input type="number" id="lbl-gap-h" value="2" step="1" oninput="updateLabelPreview()"></div>
         <div class="form-group"><label>Margen Arriba (mm)</label><input type="number" id="lbl-margin-t" value="2" step="1" oninput="updateLabelPreview()"></div>
@@ -1175,12 +1177,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="form-group"><label>Etiquetas por fila</label>
           <select id="lbl-per-row" onchange="updateLabelPreview()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:var(--radius-sm)">
             <option value="1">1</option>
-            <option value="2" selected>2</option>
-            <option value="3">3</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
             <option value="4">4</option>
           </select>
         </div>
-        <div class="form-group"><label>Tama&ntilde;o Fuente (pt)</label><input type="number" id="lbl-font" value="7" min="5" max="20" oninput="updateLabelPreview()"></div>
+        <div class="form-group"><label>Tama&ntilde;o Fuente (pt)</label><input type="number" id="lbl-font" value="6" min="5" max="20" oninput="updateLabelPreview()"></div>
         <div class="form-group" style="grid-column: 1 / -1;"><label>Cant. Copias (por producto)</label><input type="number" id="lbl-copies" value="1" min="1" oninput="updateLabelPreview()"></div>
       </div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px">
@@ -3040,19 +3042,25 @@ function updateLabelPreview(){
   // Calculate scale so 100mm fits in the preview box (max ~500px wide)
   // Assuming 100mm is ~378px. We'll use a fixed scale 1mm = 3.5px for preview.
   var scale = 3.5;
-  var totalWidthMm = (wMm * perRow) + (gapH * (perRow - 1)) + marginL + marginR;
-  document.getElementById('lbl-preview-title').innerText = 'VISTA PREVIA (Ancho total calculable: ' + totalWidthMm + 'mm + m\u00E1rgenes)';
-  
+  var pageW = parseFloat(document.getElementById('lbl-page-w').value)||0;
+  var pageH = parseFloat(document.getElementById('lbl-page-h').value)||0;
+
+  var calcW = (wMm * perRow) + (gapH * (perRow - 1)) + marginL + marginR;
+  var calcH = hMm + marginT;
+  var totalWidthMm = pageW > 0 ? pageW : calcW;
+  var totalHeightMm = pageH > 0 ? pageH : calcH;
+  document.getElementById('lbl-preview-title').innerText = 'VISTA PREVIA (P\u00E1gina final: ' + totalWidthMm + 'x' + totalHeightMm + ' mm)';
+
   var prev = document.getElementById('label-preview');
   prev.style.gridTemplateColumns = 'repeat('+perRow+', '+(wMm*scale)+'px)';
   prev.style.gap = (gapV*scale)+'px '+(gapH*scale)+'px';
   prev.style.paddingTop = (marginT*scale)+'px';
   prev.style.paddingLeft = (marginL*scale)+'px';
   prev.style.paddingRight = (marginR*scale)+'px';
-  
+
   prev.innerHTML=repeatedProds.map(function(p){
     return '<div style="width:'+(wMm*scale)+'px;height:'+(hMm*scale)+'px;border:1px solid #000;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px;font-family:monospace;font-size:'+fontSz+'pt;text-align:center;overflow:hidden;background:#fff;box-sizing:border-box">'
-      +'<div style="font-weight:700;font-size:'+(fontSz+1)+'pt;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;line-height:1.2">'+p.nombre+'</div>'
+      +'<div style="font-weight:700;font-size:'+(fontSz+1)+'pt;overflow:hidden;width:85%;line-height:1.1;max-height:2.4em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal">'+p.nombre+'</div>'
       +'<div style="color:#000;font-weight:800;font-size:'+(fontSz+2)+'pt;margin:2px 0;">'+fmt(parseFloat(p.precio_venta))+'</div>'
       +'<div style="font-size:'+(fontSz-1)+'pt;color:#555;font-family:barcode;">|||'+p.id+'|||</div></div>';
   }).join('');
@@ -3075,9 +3083,14 @@ function doPrintLabels(){
   var repeatedProds=[];
   prods.forEach(function(p){for(var c=0;c<copies;c++)repeatedProds.push(p);});
   
-  var totalWidthMm = (wMm * perRow) + (gapH * (perRow - 1)) + marginL + marginR; 
-  var pageHeightMm = hMm + marginT;
-  
+  var pageW = parseFloat(document.getElementById('lbl-page-w').value)||0;
+  var pageH = parseFloat(document.getElementById('lbl-page-h').value)||0;
+
+  var calcW = (wMm * perRow) + (gapH * (perRow - 1)) + marginL + marginR;
+  var calcH = hMm + marginT;
+  var totalWidthMm = pageW > 0 ? pageW : calcW;
+  var pageHeightMm = pageH > 0 ? pageH : calcH;
+
   var btn = document.querySelector('#modal-etiquetas .btn-primary');
   var origText = btn.innerHTML;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando PDF...';
@@ -3103,21 +3116,29 @@ function doPrintLabels(){
         var startY = marginT;
         
         doc.setFontSize(fontSz);
-        var shortName = p.nombre.length > 25 ? p.nombre.substring(0, 25) + '...' : p.nombre; 
-        doc.text(shortName, startX + (wMm/2), startY + 5, {align: 'center'});
-        
+        var bcWidth = wMm * 0.92;
+        var lines = doc.splitTextToSize(p.nombre, bcWidth);
+        if (lines.length > 2) {
+          lines = lines.slice(0, 2);
+          if(lines[1].length > 3) lines[1] = lines[1].substring(0, lines[1].length - 3) + '...';
+        }
+
+        var nameY = startY + 3.5;
+        lines.forEach(function(line, idx) {
+          doc.text(line, startX + (wMm/2), nameY + (idx * 2.5), {align: 'center'});
+        });
+
         doc.setFontSize(fontSz + 2);
-        doc.text(fmt(parseFloat(p.precio_venta)), startX + (wMm/2), startY + 10, {align: 'center'});
-        
+        doc.text(fmt(parseFloat(p.precio_venta)), startX + (wMm/2), startY + 9.0, {align: 'center'});
+
         var canvas = document.createElement('canvas');
         JsBarcode(canvas, p.id, {format:'CODE128', displayValue:true, height:35, fontSize:14, margin:0, background:'#ffffff'});
         var imgData = canvas.toDataURL("image/jpeg", 1.0);
-        
-        var bcWidth = wMm * 0.85; 
-        var bcHeight = hMm * 0.45; 
+
+        var bcHeight = hMm * 0.45;
         var bcX = startX + (wMm - bcWidth)/2;
-        var bcY = startY + 12;
-        
+        var bcY = startY + 11.0;
+
         doc.addImage(imgData, 'JPEG', bcX, bcY, bcWidth, bcHeight);
       });
       
