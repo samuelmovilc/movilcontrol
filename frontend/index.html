@@ -1679,7 +1679,7 @@ function showModule(n){
      document.getElementById('fin-date-from').value = todayStr();
      document.getElementById('fin-date-to').value = todayStr();
      var selM = document.getElementById('fin-metodo');
-     selM.innerHTML = (configCache.metodos_pago||[]).filter(function(m){return !m.toLowerCase().includes('crédito')}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
+     selM.innerHTML = (configCache.metodos_pago||[]).filter(function(m){var l=m.toLowerCase();return !l.includes('crédito') && !l.includes('credito');}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
      loadInforme();
   }
 }
@@ -2106,12 +2106,17 @@ async function processSale(){
       var ventas=await apiGet('/ventas?fecha='+localDateStr(now));
       var folio='VENTA-'+ds+'-'+String(ventas.length+1).padStart(3,'0');
       var metodosStr=payRows.map(function(r){return r.metodo+': '+fmt(r.monto)}).join(' | ');
-      
+      // metodo_pago en la BD es VARCHAR(50): aquí solo van los nombres de método (sin montos),
+      // igual que ya se hace al liquidar órdenes de servicio. El detalle completo (con montos)
+      // va en metodos_pago (JSON) y se sigue imprimiendo completo en el tiquete.
+      var metodoPagoDB=payRows.map(function(r){return r.metodo}).join(' + ');
+      if(metodoPagoDB.length>50) metodoPagoDB=metodoPagoDB.substring(0,50);
+
       var body = {
         folio:folio,fecha:localDateStr(now),
         hora:now.toTimeString().slice(0,8),
         cliente:cliente,observaciones:obs,
-        metodo_pago:metodosStr,metodos_pago:payRows,
+        metodo_pago:metodoPagoDB,metodos_pago:payRows,
         total:total,cambio:cambio,
         productos:cart.map(function(c){return{codigo:c.codigo,nombre:c.nombre,cantidad:c.cantidad,precioUnitario:c.precioUnitario,subtotal:c.subtotal}})
       };
@@ -3942,7 +3947,7 @@ async function verDetalleCredito(id) {
     
     // Configurar select de abonos
     var selMetodos = document.getElementById('cartera-abono-metodo');
-    selMetodos.innerHTML = (configCache.metodos_pago||[]).filter(function(m){return !m.toLowerCase().includes('crédito')}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
+    selMetodos.innerHTML = (configCache.metodos_pago||[]).filter(function(m){var l=m.toLowerCase();return !l.includes('crédito') && !l.includes('credito');}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
     
     document.getElementById('cartera-abono-monto').value = '';
     // Historial de abonos

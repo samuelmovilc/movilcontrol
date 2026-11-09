@@ -190,7 +190,7 @@ const schemaSQL = `
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (orden_id) REFERENCES ordenes_servicio(id) ON DELETE CASCADE
   );
-  INSERT IGNORE INTO configuracion (id, nombre_negocio, metodos_pago) VALUES (1, ?, '["Efectivo","Tarjeta débito","Tarjeta crédito","Transferencia","Otro"]');
+  INSERT IGNORE INTO configuracion (id, nombre_negocio, metodos_pago) VALUES (1, ?, '["Efectivo","Tarjeta débito","Tarjeta crédito","Transferencia","CREDITO","Otro"]');
   INSERT IGNORE INTO clientes (id, nombre) VALUES ('222222', 'CLIENTE POS');
 `;
 

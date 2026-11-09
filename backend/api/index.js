@@ -398,7 +398,12 @@ app.post('/api/ventas', tenantAuth, async (req, res) => {
     let clienteId = clienteStr.split(' - ')[0].trim();
     if (!clienteId) clienteId = '222222';
 
-    const isCredito = (metodo_pago && metodo_pago.toLowerCase().includes('crédito')) || (metodos_pago && metodos_pago.some(m => String(m.metodo).toLowerCase().includes('crédito')));
+    // metodo_pago es VARCHAR(50) en la BD: lo recortamos por seguridad aunque el
+    // frontend ya debería mandar algo corto (nombres de método, sin montos).
+    const metodoPagoSafe = (metodo_pago || '').toString().substring(0, 50);
+
+    const isCredito = (metodo_pago && (metodo_pago.toLowerCase().includes('crédito') || metodo_pago.toLowerCase().includes('credito')))
+      || (metodos_pago && metodos_pago.some(m => { const l = String(m.metodo).toLowerCase(); return l.includes('crédito') || l.includes('credito'); }));
     const estadoPago = isCredito ? 'credito' : 'contado';
 
     // Si la venta viene de un plan de crédito pre-aprobado (Cartera -> Cargar Cotización),
@@ -425,7 +430,7 @@ app.post('/api/ventas', tenantAuth, async (req, res) => {
     // Insertar venta
     const [result] = await conn.query(
       'INSERT INTO ventas (folio,fecha,hora,cliente,cliente_id,observaciones,metodo_pago,metodos_pago,total,cambio,estado,estado_pago) VALUES (?,?,?,?,?,?,?,?,?,?,"aceptada",?)',
-      [folio, fecha, hora, clienteStr, clienteId, observaciones||'', metodo_pago||'', JSON.stringify(metodos_pago||[]), total, cambio||0, estadoPago]
+      [folio, fecha, hora, clienteStr, clienteId, observaciones||'', metodoPagoSafe, JSON.stringify(metodos_pago||[]), total, cambio||0, estadoPago]
     );
     const ventaId = result.insertId;
     // Insertar detalle + descontar stock
@@ -1657,7 +1662,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (orden_id) REFERENCES ordenes_servicio(id) ON DELETE CASCADE
       );
-      INSERT IGNORE INTO configuracion (id, nombre_negocio, metodos_pago) VALUES (1, ?, '["Efectivo","Tarjeta débito","Tarjeta crédito","Transferencia","Otro"]');
+      INSERT IGNORE INTO configuracion (id, nombre_negocio, metodos_pago) VALUES (1, ?, '["Efectivo","Tarjeta débito","Tarjeta crédito","Transferencia","CREDITO","Otro"]');
       INSERT IGNORE INTO clientes (id, nombre) VALUES ('222222', 'CLIENTE POS');
     `;
 
