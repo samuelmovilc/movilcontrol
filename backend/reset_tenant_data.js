@@ -1,14 +1,15 @@
 /**
- * RESET DE DATOS DE UN TENANT (clientes + transacciones)
+ * RESET DE DATOS DE UN TENANT (clientes + transacciones + productos)
  * ---------------------------------------------------------------
- * Deja un tenant existente con el CATÁLOGO DE PRODUCTOS y la
- * CONFIGURACIÓN intactos, pero en blanco:
+ * Deja un tenant existente con la CONFIGURACIÓN del negocio intacta,
+ * pero todo lo demás en blanco:
+ *   - productos
  *   - clientes
  *   - ventas (y sus venta_productos)
  *   - créditos (y sus credito_cuotas / abonos)
  *   - movimientos_caja
  *
- * NO toca: productos, configuracion, catalogos, tecnicos,
+ * NO toca: configuracion, catalogos, tecnicos,
  * ordenes_servicio, orden_prendas (si existieran).
  *
  * Uso:
@@ -32,11 +33,12 @@ const TABLAS_A_BORRAR = [
   'venta_productos',
   'ventas',
   'movimientos_caja',
-  'clientes'
+  'clientes',
+  'productos'
 ];
 
 // Tablas que deben quedar SIN TOCAR — solo para mostrar antes/después como verificación
-const TABLAS_INTACTAS = ['productos', 'configuracion', 'catalogos', 'tecnicos'];
+const TABLAS_INTACTAS = ['configuracion', 'catalogos', 'tecnicos'];
 
 const dbConfig = {
   host: process.env.DB_HOST || '89.117.56.39',
@@ -108,8 +110,8 @@ async function contarFilas(conn, tabla) {
     }
 
     linea();
-    console.log('✅ LISTO. "' + TENANT_DB + '" quedó con clientes y transacciones en blanco.');
-    console.log('   El catálogo de productos y la configuración del negocio NO se tocaron.');
+    console.log('✅ LISTO. "' + TENANT_DB + '" quedó con productos, clientes y transacciones en blanco.');
+    console.log('   Solo la configuración del negocio (nombre, logo, etc.) NO se tocó.');
     linea();
 
   } catch (err) {
