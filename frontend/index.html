@@ -808,9 +808,15 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <div class="card">
       <div class="card-header"><i class="fa-solid fa-building"></i> Datos del negocio</div>
       <div class="config-section">
-        <div class="config-field"><label>Nombre</label><input type="text" id="cfg-nombre"></div>
-        <div class="config-field"><label>Dirección</label><input type="text" id="cfg-direccion"></div>
-        <div class="config-field"><label>Teléfono</label><input type="text" id="cfg-telefono"></div>
+        <div class="config-field"><label>Nombre</label><input type="text" id="cfg-nombre">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-light);cursor:pointer;margin-top:4px;font-weight:400"><input type="checkbox" id="cfg-nombre-tirilla" checked style="margin:0"> Mostrar en la tirilla</label>
+        </div>
+        <div class="config-field"><label>Dirección</label><input type="text" id="cfg-direccion">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-light);cursor:pointer;margin-top:4px;font-weight:400"><input type="checkbox" id="cfg-direccion-tirilla" checked style="margin:0"> Mostrar en la tirilla</label>
+        </div>
+        <div class="config-field"><label>Teléfono</label><input type="text" id="cfg-telefono">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-light);cursor:pointer;margin-top:4px;font-weight:400"><input type="checkbox" id="cfg-telefono-tirilla" checked style="margin:0"> Mostrar en la tirilla</label>
+        </div>
         <div class="config-field"><label>Logo</label><input type="file" id="cfg-logo" accept="image/*" onchange="loadLogo(this)">
           <img id="logo-preview" src="" style="display:none;max-height:52px;margin-top:5px;border-radius:4px;border:1px solid var(--border)"></div>
         <button class="btn btn-primary" onclick="saveBusinessData()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
@@ -1594,7 +1600,9 @@ async function apiDelete(url){
 
 /* ═══ STATE ═══ */
 var productosCache=[];
-var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm'};
+var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm',mostrar_nombre_tirilla:true,mostrar_direccion_tirilla:true,mostrar_telefono_tirilla:true};
+// Tenants creados antes de este campo no lo traen de la BD (undefined/null) -> por defecto se sigue mostrando, igual que antes
+function tirillaFlag(v){ return (v===undefined||v===null) ? true : !!Number(v); }
 var configId=1;
 var cart=[];
 var currentSaleForReprint=null;
@@ -2145,6 +2153,9 @@ function printTicket(venta){
   var dir=cfg.direccion||'';
   var tel=cfg.telefono||'';
   var msg=cfg.mensaje_tirilla||cfg.mensajeTirilla||'¡Gracias por su compra!';
+  var showNombre=tirillaFlag(cfg.mostrar_nombre_tirilla);
+  var showDir=tirillaFlag(cfg.mostrar_direccion_tirilla);
+  var showTel=tirillaFlag(cfg.mostrar_telefono_tirilla);
 
   var mp=venta.metodosPago||venta.metodos_pago||[];
   if(typeof mp==='string'){try{mp=JSON.parse(mp)}catch(e){mp=[]}}
@@ -2243,9 +2254,9 @@ function printTicket(venta){
   }
 
   // Header negocio: nombre + dirección + teléfono, alineados igual que los datos de la factura
-  addLine(nombre,10,true,false);
-  if(dir)addLine('Direccion: '+dir,7,false,false,false,true);
-  if(tel)addLine('Telefono: '+tel,7,false,false,false,true);
+  if(showNombre)addLine(nombre,10,true,false);
+  if(dir&&showDir)addLine('Direccion: '+dir,7,false,false,false,true);
+  if(tel&&showTel)addLine('Telefono: '+tel,7,false,false,false,true);
   y+=1.5;
   addSep();
 
@@ -2341,9 +2352,9 @@ function printTicket(venta){
   }
 
   if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+2;}catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}}
-  al(nombre,10,true,false);
-  if(dir)al('Direccion: '+dir,7,false,false,true);
-  if(tel)al('Telefono: '+tel,7,false,false,true);
+  if(showNombre)al(nombre,10,true,false);
+  if(dir&&showDir)al('Direccion: '+dir,7,false,false,true);
+  if(tel&&showTel)al('Telefono: '+tel,7,false,false,true);
   y+=1.5;as2();
 
   al(venta.fecha+' '+venta.hora,7,false,false,true);
@@ -3254,6 +3265,9 @@ function loadConfigUI(){
   document.getElementById('cfg-nombre').value=cfg.nombre_negocio||cfg.nombreNegocio||'';
   document.getElementById('cfg-direccion').value=cfg.direccion||'';
   document.getElementById('cfg-telefono').value=cfg.telefono||'';
+  document.getElementById('cfg-nombre-tirilla').checked=tirillaFlag(cfg.mostrar_nombre_tirilla);
+  document.getElementById('cfg-direccion-tirilla').checked=tirillaFlag(cfg.mostrar_direccion_tirilla);
+  document.getElementById('cfg-telefono-tirilla').checked=tirillaFlag(cfg.mostrar_telefono_tirilla);
   document.getElementById('cfg-mensaje').value=cfg.mensaje_tirilla||cfg.mensajeTirilla||'';
   document.getElementById('cfg-stock-critico').value=cfg.stock_critico||10;
   document.getElementById('cfg-ticket-size').value=cfg.tamano_ticket||'80mm';
@@ -3299,7 +3313,10 @@ async function saveBusinessData(){
       metodos_pago:configCache.metodos_pago,
       mensaje_tirilla:configCache.mensaje_tirilla||'',
       stock_critico:configCache.stock_critico||10,
-      tamano_ticket:configCache.tamano_ticket||'80mm'
+      tamano_ticket:configCache.tamano_ticket||'80mm',
+      mostrar_nombre_tirilla:document.getElementById('cfg-nombre-tirilla').checked,
+      mostrar_direccion_tirilla:document.getElementById('cfg-direccion-tirilla').checked,
+      mostrar_telefono_tirilla:document.getElementById('cfg-telefono-tirilla').checked
     });
     configCache=updated;
     if(updated.metodos_pago&&typeof updated.metodos_pago==='string')configCache.metodos_pago=JSON.parse(updated.metodos_pago);

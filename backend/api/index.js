@@ -551,10 +551,11 @@ app.get('/api/configuracion', tenantAuth, async (req, res) => {
 
 app.put('/api/configuracion/:id', tenantAuth, async (req, res) => {
   try {
-    const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket } = req.body;
+    const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket, mostrar_nombre_tirilla, mostrar_direccion_tirilla, mostrar_telefono_tirilla } = req.body;
+    const flag = (v) => v===undefined || v===null ? true : !!v;
     await req.tenantPool.query(
-      'UPDATE configuracion SET nombre_negocio=?,direccion=?,telefono=?,logo=?,metodos_pago=?,mensaje_tirilla=?,stock_critico=?,tamano_ticket=? WHERE id=?',
-      [nombre_negocio, direccion, telefono, logo||null, JSON.stringify(metodos_pago||[]), mensaje_tirilla, stock_critico||10, tamano_ticket||'80mm', req.params.id]
+      'UPDATE configuracion SET nombre_negocio=?,direccion=?,telefono=?,logo=?,metodos_pago=?,mensaje_tirilla=?,stock_critico=?,tamano_ticket=?,mostrar_nombre_tirilla=?,mostrar_direccion_tirilla=?,mostrar_telefono_tirilla=? WHERE id=?',
+      [nombre_negocio, direccion, telefono, logo||null, JSON.stringify(metodos_pago||[]), mensaje_tirilla, stock_critico||10, tamano_ticket||'80mm', flag(mostrar_nombre_tirilla), flag(mostrar_direccion_tirilla), flag(mostrar_telefono_tirilla), req.params.id]
     );
     const [rows] = await req.tenantPool.query('SELECT * FROM configuracion WHERE id=?', [req.params.id]);
     res.json(rows[0]);
@@ -1575,6 +1576,9 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         stock_critico INT DEFAULT 10,
         tamano_ticket VARCHAR(20) DEFAULT '80mm',
         mostrarPrecios BOOLEAN DEFAULT TRUE,
+        mostrar_nombre_tirilla BOOLEAN DEFAULT TRUE,
+        mostrar_direccion_tirilla BOOLEAN DEFAULT TRUE,
+        mostrar_telefono_tirilla BOOLEAN DEFAULT TRUE,
         pin VARCHAR(20) DEFAULT '3195122754',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       );
