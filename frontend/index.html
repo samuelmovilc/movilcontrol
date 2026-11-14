@@ -3226,9 +3226,27 @@ function loadLogo(input){
   var file=input.files[0];if(!file)return;
   var r=new FileReader();
   r.onload=function(e){
-    var img=document.getElementById('logo-preview');img.src=e.target.result;img.style.display='block';
-    configCache.logo=e.target.result;
-    toast('Logo cargado. Guarda los datos para guardar.','info');
+    var img=new Image();
+    img.onload=function(){
+      // El logo en el tiquete se dibuja a solo 40x15mm, así que se redimensiona/comprime
+      // aquí antes de guardarlo: así cada PDF generado pesa muy poco sin importar qué
+      // tan pesada sea la foto/imagen original que suba el cliente.
+      var maxW=300;
+      var scale=Math.min(1,maxW/(img.width||maxW));
+      var w=Math.max(1,Math.round((img.width||maxW)*scale));
+      var h=Math.max(1,Math.round((img.height||maxW)*scale));
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h); // fondo blanco por si el original es PNG con transparencia
+      ctx.drawImage(img,0,0,w,h);
+      var dataUrl=canvas.toDataURL('image/jpeg',0.85);
+      var preview=document.getElementById('logo-preview');preview.src=dataUrl;preview.style.display='block';
+      configCache.logo=dataUrl;
+      toast('Logo cargado. Guarda los datos para guardar.','info');
+    };
+    img.onerror=function(){toast('No se pudo procesar la imagen del logo','error');};
+    img.src=e.target.result;
   };
   r.readAsDataURL(file);
 }
