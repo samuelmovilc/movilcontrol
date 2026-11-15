@@ -1224,7 +1224,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <h4><i class="fa-solid fa-user-plus"></i> <span id="form-cliente-title">Nuevo Cliente</span></h4>
         <input type="hidden" id="cli-original-id">
         <div class="clientes-form-grid">
-          <div class="form-group"><label>Cédula/NIT *</label><input type="text" id="cli-id" placeholder="Ej: 123456789"></div>
+          <div class="form-group"><label>NIT|CEDULA|CODIGO *</label><input type="text" id="cli-id" placeholder="Ej: 123456789"></div>
           <div class="form-group"><label>Nombre *</label><input type="text" id="cli-nombre" placeholder="Nombre completo"></div>
           <div class="form-group"><label>Teléfono</label><input type="text" id="cli-telefono" placeholder="Opcional"></div>
           <div class="form-group"><label>Dirección</label><input type="text" id="cli-direccion" placeholder="Opcional"></div>
@@ -1244,7 +1244,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         </div>
         <div class="clientes-tbl-wrap">
           <table class="clientes-table">
-            <thead><tr><th>Cédula/NIT</th><th>Nombre</th><th>Teléfono</th><th class="col-acc"></th></tr></thead>
+            <thead><tr><th>NIT|CEDULA|CODIGO</th><th>Nombre</th><th>Teléfono</th><th class="col-acc"></th></tr></thead>
             <tbody id="clientes-body"></tbody>
           </table>
         </div>
@@ -1410,7 +1410,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   <div class="modal" style="max-width:460px">
     <div class="modal-header"><span><i class="fa-solid fa-user-plus"></i> Registrar Cliente</span><button class="modal-close" onclick="closeModal('modal-cliente-rapido')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
-      <div class="form-group"><label>Cédula/NIT *</label><input type="text" id="clir-id" placeholder="Ej: 123456789"></div>
+      <div class="form-group"><label>NIT|CEDULA|CODIGO *</label><input type="text" id="clir-id" placeholder="Ej: 123456789"></div>
       <div class="form-group"><label>Nombre *</label><input type="text" id="clir-nombre" placeholder="Nombre completo"></div>
       <div class="form-group"><label>Teléfono</label><input type="text" id="clir-telefono" placeholder="Opcional"></div>
       <div class="form-group"><label>Dirección</label><input type="text" id="clir-direccion" placeholder="Opcional"></div>
@@ -3532,7 +3532,7 @@ async function saveCliente() {
   var direccion = document.getElementById('cli-direccion').value.trim();
 
   if (!id || !nombre) {
-    toast('Cédula/NIT y Nombre son obligatorios', 'error');
+    toast('NIT|CEDULA|CODIGO y Nombre son obligatorios', 'error');
     return;
   }
 
@@ -3571,7 +3571,7 @@ async function guardarClienteRapido() {
   var direccion = document.getElementById('clir-direccion').value.trim();
 
   if (!id || !nombre) {
-    toast('Cédula/NIT y Nombre son obligatorios', 'error');
+    toast('NIT|CEDULA|CODIGO y Nombre son obligatorios', 'error');
     return;
   }
 
