@@ -1372,7 +1372,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <div class="modal-header"><span><i class="fa-solid fa-shirt"></i> Nueva Orden de Servicio</span><button class="modal-close" onclick="closeModal('modal-orden-nueva')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
-        <div class="form-group"><label>Cliente</label><select id="orden-cliente"></select></div>
+        <div class="form-group"><label>Cliente</label>
+          <div style="display:flex;gap:6px">
+            <select id="orden-cliente" style="flex:1"></select>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="abrirClienteRapido()" title="Registrar cliente nuevo" style="padding:0 11px"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
         <div class="form-group"><label>Fecha recibido</label><input type="date" id="orden-fecha-recibido"></div>
         <div class="form-group"><label>Entrega estimada</label><input type="date" id="orden-fecha-entrega"></div>
       </div>
@@ -1396,6 +1401,20 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
       </div>
 
       <button class="btn btn-primary" onclick="guardarNuevaOrden()" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Crear Orden</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ NUEVO CLIENTE RÁPIDO (desde Nueva Orden) ═══ -->
+<div class="modal-overlay" id="modal-cliente-rapido">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header"><span><i class="fa-solid fa-user-plus"></i> Registrar Cliente</span><button class="modal-close" onclick="closeModal('modal-cliente-rapido')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
+      <div class="form-group"><label>Cédula/NIT *</label><input type="text" id="clir-id" placeholder="Ej: 123456789"></div>
+      <div class="form-group"><label>Nombre *</label><input type="text" id="clir-nombre" placeholder="Nombre completo"></div>
+      <div class="form-group"><label>Teléfono</label><input type="text" id="clir-telefono" placeholder="Opcional"></div>
+      <div class="form-group"><label>Dirección</label><input type="text" id="clir-direccion" placeholder="Opcional"></div>
+      <button class="btn btn-primary" onclick="guardarClienteRapido()" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Guardar y usar en la orden</button>
     </div>
   </div>
 </div>
@@ -3531,6 +3550,41 @@ async function saveCliente() {
     resetClienteForm();
     loadClientesLista();
     loadClientesDropdown();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+  hideLoading();
+}
+
+function abrirClienteRapido() {
+  document.getElementById('clir-id').value = '';
+  document.getElementById('clir-nombre').value = '';
+  document.getElementById('clir-telefono').value = '';
+  document.getElementById('clir-direccion').value = '';
+  openModal('modal-cliente-rapido');
+}
+
+async function guardarClienteRapido() {
+  var id = document.getElementById('clir-id').value.trim();
+  var nombre = document.getElementById('clir-nombre').value.trim();
+  var telefono = document.getElementById('clir-telefono').value.trim();
+  var direccion = document.getElementById('clir-direccion').value.trim();
+
+  if (!id || !nombre) {
+    toast('Cédula/NIT y Nombre son obligatorios', 'error');
+    return;
+  }
+
+  showLoading('Guardando cliente...');
+  try {
+    // Mismo endpoint y misma tabla `clientes` que usa Configuración —
+    // el cliente queda registrado de verdad, no es algo temporal solo para esta orden.
+    await apiPost('/clientes', { id: id, nombre: nombre, telefono: telefono, direccion: direccion });
+    await loadClientesDropdown(false);
+    var ordenSelect = document.getElementById('orden-cliente');
+    if (ordenSelect) ordenSelect.value = id + ' - ' + nombre;
+    closeModal('modal-cliente-rapido');
+    toast('Cliente creado y seleccionado en la orden', 'success');
   } catch (e) {
     toast('Error: ' + e.message, 'error');
   }
