@@ -978,6 +978,8 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         </select>
         <input type="number" id="filter-ordenes-monto-min" placeholder="Monto mín." style="width:100px;padding:7px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px" oninput="loadOrdenes()">
         <input type="number" id="filter-ordenes-monto-max" placeholder="Monto máx." style="width:100px;padding:7px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px" oninput="loadOrdenes()">
+        <input type="text" id="filter-ordenes-cliente" placeholder="Cliente..." style="width:140px;padding:7px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px" oninput="loadOrdenesDebounced()">
+        <input type="text" id="filter-ordenes-cliente-id" placeholder="ID Cliente..." style="width:110px;padding:7px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px" oninput="loadOrdenesDebounced()">
         <div class="cartera-icon-actions">
           <button class="btn btn-secondary btn-xs" onclick="clearOrdenesFilters()" title="Borrar Filtros" style="padding:7px 10px;border-radius:50%"><i class="fa-solid fa-filter-circle-xmark"></i></button>
         </div>
@@ -4519,7 +4521,15 @@ function clearOrdenesFilters(){
   document.getElementById('filter-ordenes-tecnico').value = '';
   document.getElementById('filter-ordenes-monto-min').value = '';
   document.getElementById('filter-ordenes-monto-max').value = '';
+  document.getElementById('filter-ordenes-cliente').value = '';
+  document.getElementById('filter-ordenes-cliente-id').value = '';
   setOrdenesEstado('');
+}
+
+var _ordenesDebounceTimer = null;
+function loadOrdenesDebounced(){
+  clearTimeout(_ordenesDebounceTimer);
+  _ordenesDebounceTimer = setTimeout(loadOrdenes, 350);
 }
 
 async function loadOrdenes(){
@@ -4531,6 +4541,10 @@ async function loadOrdenes(){
   if(mmin) params.push('monto_min='+encodeURIComponent(mmin));
   var mmax = document.getElementById('filter-ordenes-monto-max').value;
   if(mmax) params.push('monto_max='+encodeURIComponent(mmax));
+  var cliente = document.getElementById('filter-ordenes-cliente').value.trim();
+  if(cliente) params.push('busqueda='+encodeURIComponent(cliente));
+  var clienteId = document.getElementById('filter-ordenes-cliente-id').value.trim();
+  if(clienteId) params.push('cliente_id='+encodeURIComponent(clienteId));
   try {
     ordenesCache = await apiGet('/ordenes'+(params.length?'?'+params.join('&'):''));
   } catch(e) { toast('Error cargando órdenes: '+e.message,'error'); return; }
