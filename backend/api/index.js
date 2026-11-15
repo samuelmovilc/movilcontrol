@@ -60,6 +60,32 @@ const tenantAuth = async (req, res, next) => {
   }
 };
 
+// Exige que, si quien hace la petición es el usuario "vendedor" (no el dueño del
+// negocio), tenga habilitado al menos uno de los módulos indicados. El dueño
+// (cualquier token sin role==='vendedor', incluidos los tokens viejos emitidos
+// antes de que existiera este sistema) siempre pasa sin restricción.
+function requireModulo() {
+  const modulos = Array.prototype.slice.call(arguments);
+  return (req, res, next) => {
+    if (req.tenant && req.tenant.role === 'vendedor') {
+      const permitidos = req.tenant.vendedor_modulos || [];
+      const tienePermiso = modulos.some(m => permitidos.indexOf(m) !== -1);
+      if (!tienePermiso) return res.status(403).json({ error: 'No tienes permiso para acceder a este módulo' });
+    }
+    next();
+  };
+}
+
+// Exige que quien hace la petición sea el dueño del negocio, nunca el vendedor
+// (se usa para la gestión del propio usuario vendedor: un vendedor jamás debe
+// poder cambiar sus propios permisos aunque tenga el módulo Config habilitado).
+function requireOwner(req, res, next) {
+  if (req.tenant && req.tenant.role === 'vendedor') {
+    return res.status(403).json({ error: 'Solo el dueño del negocio puede hacer esto' });
+  }
+  next();
+}
+
 
 // ── MIDDLEWARE ──
 app.use(express.json({ limit: '10mb' }));
@@ -77,30 +103,58 @@ app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Faltan credenciales' });
 
-    const [rows] = await masterPool.query('SELECT * FROM tenants WHERE username = ? AND is_active = 1', [username]);
-    if (rows.length === 0) return res.status(401).json({ error: 'Hola Empresario Exitoso. Contáctame para Verificar Tu Base de Datos. Att: Samuel M, Asesor De Confianza MovilControl. +573195122754 este es el número para que me contacten por WhatsApp.' });
-    
-    const tenant = rows[0];
-    if (password !== tenant.password) return res.status(401).json({ error: 'Contraseña incorrecta' });
+    const NOT_FOUND_MSG = 'Hola Empresario Exitoso. Contáctame para Verificar Tu Base de Datos. Att: Samuel M, Asesor De Confianza MovilControl. +573195122754 este es el número para que me contacten por WhatsApp.';
 
-    // Validar fechas
+    const [rows] = await masterPool.query('SELECT * FROM tenants WHERE username = ? AND is_active = 1', [username]);
+    let tenant, role;
+
+    if (rows.length > 0) {
+      // Login del dueño del negocio
+      tenant = rows[0];
+      if (password !== tenant.password) return res.status(401).json({ error: 'Contraseña incorrecta' });
+      role = 'owner';
+    } else {
+      // ¿Es el usuario vendedor de algún tenant?
+      const [vrows] = await masterPool.query('SELECT * FROM tenants WHERE vendedor_username = ? AND vendedor_activo = 1 AND is_active = 1', [username]);
+      if (vrows.length === 0) return res.status(401).json({ error: NOT_FOUND_MSG });
+      tenant = vrows[0];
+      if (password !== tenant.vendedor_password) return res.status(401).json({ error: 'Contraseña incorrecta' });
+      role = 'vendedor';
+    }
+
+    // Validar fechas (la licencia es del negocio, aplica igual al dueño y al vendedor)
     const now = new Date();
     if (tenant.end_date && new Date(tenant.end_date) < now) {
       return res.status(403).json({ error: 'Licencia expirada. Contacte a soporte.' });
     }
 
+    const tenantModules = typeof tenant.modules === 'string' ? JSON.parse(tenant.modules) : (tenant.modules || {});
+    const vendedorModulos = role === 'vendedor'
+      ? (typeof tenant.vendedor_modulos === 'string' ? JSON.parse(tenant.vendedor_modulos || '[]') : (tenant.vendedor_modulos || []))
+      : [];
+
     const token = jwt.sign(
-      { 
-        tenant_id: tenant.id, 
-        business_name: tenant.business_name, 
-        db_name: tenant.db_name, 
-        modules: typeof tenant.modules === 'string' ? JSON.parse(tenant.modules) : (tenant.modules || {}) 
-      }, 
-      JWT_SECRET, 
+      {
+        tenant_id: tenant.id,
+        business_name: tenant.business_name,
+        db_name: tenant.db_name,
+        modules: tenantModules,
+        role: role,
+        vendedor_modulos: vendedorModulos
+      },
+      JWT_SECRET,
       { expiresIn: '12h' }
     );
 
-    res.json({ success: true, token, business_name: tenant.business_name, modules: typeof tenant.modules === 'string' ? JSON.parse(tenant.modules) : (tenant.modules || {}) });
+    res.json({
+      success: true,
+      token,
+      business_name: tenant.business_name,
+      modules: tenantModules,
+      role: role,
+      vendedor_modulos: vendedorModulos,
+      vendedor_nombre: role === 'vendedor' ? tenant.vendedor_nombre : null
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -121,7 +175,7 @@ app.get('/api/health', async (req, res) => {
 // ════════════════════════════════
 
 // GET todos
-app.get('/api/productos', tenantAuth, async (req, res) => {
+app.get('/api/productos', tenantAuth, requireModulo('pos','productos'), async (req, res) => {
   try {
     const { nombre, codigo, stock_max, precio_min, precio_max, orden } = req.query;
     let sql = 'SELECT * FROM productos WHERE 1=1';
@@ -140,7 +194,7 @@ app.get('/api/productos', tenantAuth, async (req, res) => {
 });
 
 // GET uno
-app.get('/api/productos/:id', tenantAuth, async (req, res) => {
+app.get('/api/productos/:id', tenantAuth, requireModulo('pos','productos'), async (req, res) => {
   try {
     const [rows] = await req.tenantPool.query('SELECT * FROM productos WHERE id=?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
@@ -149,7 +203,7 @@ app.get('/api/productos/:id', tenantAuth, async (req, res) => {
 });
 
 // POST crear
-app.post('/api/productos', tenantAuth, async (req, res) => {
+app.post('/api/productos', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
     const { id, nombre, precio_venta, precio_compra, stock, imagen } = req.body;
     if (!id || !nombre || precio_venta == null || stock == null)
@@ -167,7 +221,7 @@ app.post('/api/productos', tenantAuth, async (req, res) => {
 });
 
 // PUT actualizar
-app.put('/api/productos/:id', tenantAuth, async (req, res) => {
+app.put('/api/productos/:id', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
     const { nombre, precio_venta, precio_compra, stock, imagen } = req.body;
     const [old] = await req.tenantPool.query('SELECT stock, entradas FROM productos WHERE id=?', [req.params.id]);
@@ -183,7 +237,7 @@ app.put('/api/productos/:id', tenantAuth, async (req, res) => {
 });
 
 // PATCH solo stock
-app.patch('/api/productos/:id/stock', tenantAuth, async (req, res) => {
+app.patch('/api/productos/:id/stock', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
     const { stock } = req.body;
     const [old] = await req.tenantPool.query('SELECT stock FROM productos WHERE id=?', [req.params.id]);
@@ -199,7 +253,7 @@ app.patch('/api/productos/:id/stock', tenantAuth, async (req, res) => {
 });
 
 // DELETE eliminar (solo sin ventas)
-app.delete('/api/productos/:id', tenantAuth, async (req, res) => {
+app.delete('/api/productos/:id', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
     const [check] = await req.tenantPool.query('SELECT COUNT(*) as cnt FROM venta_productos WHERE producto_id=?', [req.params.id]);
     if (check[0].cnt > 0) return res.status(409).json({ error: 'Tiene ventas asociadas' });
@@ -209,7 +263,7 @@ app.delete('/api/productos/:id', tenantAuth, async (req, res) => {
 });
 
 // POST importar masivo
-app.post('/api/productos/importar', tenantAuth, async (req, res) => {
+app.post('/api/productos/importar', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
     const { productos } = req.body;
     if (!Array.isArray(productos)) return res.status(400).json({ error: 'Array requerido' });
@@ -321,7 +375,7 @@ app.delete('/api/clientes/:id', tenantAuth, async (req, res) => {
 // ════════════════════════════════
 
 // GET ventas por fecha/estado
-app.get('/api/ventas', tenantAuth, async (req, res) => {
+app.get('/api/ventas', tenantAuth, requireModulo('pos','caja'), async (req, res) => {
   try {
     const { fecha, estado } = req.query;
     let sql = 'SELECT * FROM ventas WHERE 1=1';
@@ -341,7 +395,7 @@ app.get('/api/ventas', tenantAuth, async (req, res) => {
 });
 
 // GET resumen del día
-app.get('/api/ventas/resumen/:fecha', tenantAuth, async (req, res) => {
+app.get('/api/ventas/resumen/:fecha', tenantAuth, requireModulo('pos','caja'), async (req, res) => {
   try {
     const [ventas] = await req.tenantPool.query(
       'SELECT v.*, vp.precio_unitario, vp.cantidad, vp.subtotal, vp.producto_id FROM ventas v LEFT JOIN venta_productos vp ON v.id=vp.venta_id WHERE v.fecha=? AND v.estado="aceptada"',
@@ -372,7 +426,7 @@ app.get('/api/ventas/resumen/:fecha', tenantAuth, async (req, res) => {
 });
 
 // GET venta por folio
-app.get('/api/ventas/:folio', tenantAuth, async (req, res) => {
+app.get('/api/ventas/:folio', tenantAuth, requireModulo('pos','caja'), async (req, res) => {
   try {
     const [ventas] = await req.tenantPool.query('SELECT * FROM ventas WHERE folio=?', [req.params.folio]);
     if (!ventas.length) return res.status(404).json({ error: 'No encontrado' });
@@ -385,7 +439,7 @@ app.get('/api/ventas/:folio', tenantAuth, async (req, res) => {
 });
 
 // POST crear venta
-app.post('/api/ventas', tenantAuth, async (req, res) => {
+app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -510,7 +564,7 @@ app.post('/api/ventas', tenantAuth, async (req, res) => {
 });
 
 // PATCH anular venta
-app.patch('/api/ventas/:folio/anular', tenantAuth, async (req, res) => {
+app.patch('/api/ventas/:folio/anular', tenantAuth, requireModulo('pos','caja'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -549,7 +603,7 @@ app.get('/api/configuracion', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/configuracion/:id', tenantAuth, async (req, res) => {
+app.put('/api/configuracion/:id', tenantAuth, requireModulo('config'), async (req, res) => {
   try {
     const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket, mostrar_nombre_tirilla, mostrar_direccion_tirilla, mostrar_telefono_tirilla } = req.body;
     const flag = (v) => v===undefined || v===null ? true : !!v;
@@ -563,11 +617,51 @@ app.put('/api/configuracion/:id', tenantAuth, async (req, res) => {
 });
 
 // ════════════════════════════════
+// USUARIO VENDEDOR (sub-usuario del tenant, con permisos por módulo)
+// ════════════════════════════════
+// Solo el dueño del negocio puede ver/editar esto (requireOwner) — un vendedor
+// jamás puede cambiar sus propios permisos, así tenga el módulo Config habilitado.
+
+app.get('/api/vendedor', tenantAuth, requireOwner, async (req, res) => {
+  try {
+    const [rows] = await masterPool.query(
+      'SELECT vendedor_username, vendedor_nombre, vendedor_modulos, vendedor_activo FROM tenants WHERE id=?',
+      [req.tenant.tenant_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Tenant no encontrado' });
+    const v = rows[0];
+    v.vendedor_modulos = typeof v.vendedor_modulos === 'string' ? JSON.parse(v.vendedor_modulos || '[]') : (v.vendedor_modulos || []);
+    res.json(v);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/vendedor', tenantAuth, requireOwner, async (req, res) => {
+  try {
+    const { vendedor_username, vendedor_password, vendedor_nombre, vendedor_modulos, vendedor_activo } = req.body;
+    // La contraseña del vendedor es opcional al editar: si viene vacía, se deja la que ya tenía
+    // (así el dueño puede cambiar solo el nombre o los módulos sin tener que reescribir la clave).
+    let sql = 'UPDATE tenants SET vendedor_username=?, vendedor_nombre=?, vendedor_modulos=?, vendedor_activo=?';
+    const params = [vendedor_username || null, vendedor_nombre || '', JSON.stringify(vendedor_modulos || []), vendedor_activo ? 1 : 0];
+    if (vendedor_password) { sql += ', vendedor_password=?'; params.push(vendedor_password); }
+    sql += ' WHERE id=?';
+    params.push(req.tenant.tenant_id);
+    await masterPool.query(sql, params);
+    const [rows] = await masterPool.query(
+      'SELECT vendedor_username, vendedor_nombre, vendedor_modulos, vendedor_activo FROM tenants WHERE id=?',
+      [req.tenant.tenant_id]
+    );
+    const v = rows[0];
+    v.vendedor_modulos = typeof v.vendedor_modulos === 'string' ? JSON.parse(v.vendedor_modulos || '[]') : (v.vendedor_modulos || []);
+    res.json(v);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════
 // CREDITOS
 // ════════════════════════════════
 
 // Anular cotización (solo si está en estado aprobado)
-app.patch('/api/creditos/:id/anular', tenantAuth, async (req, res) => {
+app.patch('/api/creditos/:id/anular', tenantAuth, requireModulo('cartera'), async (req, res) => {
   try {
     const [[credito]] = await req.tenantPool.query('SELECT estado FROM creditos WHERE id = ?', [req.params.id]);
     if (!credito) return res.status(404).json({ error: 'Crédito no encontrado' });
@@ -583,7 +677,7 @@ app.patch('/api/creditos/:id/anular', tenantAuth, async (req, res) => {
   }
 });
 
-app.get('/api/creditos', tenantAuth, async (req, res) => {
+app.get('/api/creditos', tenantAuth, requireModulo('cartera'), async (req, res) => {
   try {
     const { cliente_id, estado } = req.query;
     let sql = 'SELECT c.*, cl.nombre as cliente_nombre FROM creditos c JOIN clientes cl ON c.cliente_id = cl.id WHERE 1=1';
@@ -646,7 +740,7 @@ app.get('/api/creditos', tenantAuth, async (req, res) => {
 // Recaudo total discriminado por método de pago, respetando los mismos filtros
 // (cliente_id/estado) que la lista principal de cartera. Debe ir ANTES de
 // GET /api/creditos/:id para que "resumen-metodos" no se capture como :id.
-app.get('/api/creditos/resumen-metodos', tenantAuth, async (req, res) => {
+app.get('/api/creditos/resumen-metodos', tenantAuth, requireModulo('cartera'), async (req, res) => {
   try {
     const { cliente_id, estado } = req.query;
     let sql = `SELECT COALESCE(NULLIF(TRIM(m.metodo_pago),''),'Otro') AS metodo, SUM(m.monto) AS total
@@ -662,7 +756,7 @@ app.get('/api/creditos/resumen-metodos', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/creditos/:id', tenantAuth, async (req, res) => {
+app.get('/api/creditos/:id', tenantAuth, requireModulo('cartera'), async (req, res) => {
   try {
     const [creditos] = await req.tenantPool.query('SELECT c.*, cl.nombre as cliente_nombre FROM creditos c JOIN clientes cl ON c.cliente_id = cl.id WHERE c.id=?', [req.params.id]);
     if (!creditos.length) return res.status(404).json({ error: 'Crédito no encontrado' });
@@ -681,7 +775,7 @@ app.get('/api/creditos/:id', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/creditos/plan', tenantAuth, async (req, res) => {
+app.post('/api/creditos/plan', tenantAuth, requireModulo('cartera'), async (req, res) => {
   try {
     const { cliente_id, precio_contado, porcentaje_recargo, total_credito, inicial, num_cuotas, frecuencia, productos } = req.body;
     if (!cliente_id || !precio_contado || !num_cuotas) return res.status(400).json({ error: 'Faltan campos' });
@@ -746,7 +840,7 @@ async function recalcularEstadoCredito(conn, creditoId) {
   return { ...cred, estado: nuevoEstado };
 }
 
-app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
+app.post('/api/creditos/:id/abonos', tenantAuth, requireModulo('cartera'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -799,7 +893,7 @@ app.post('/api/creditos/:id/abonos', tenantAuth, async (req, res) => {
   }
 });
 
-app.put('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, res) => {
+app.put('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, requireModulo('cartera'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -851,7 +945,7 @@ app.put('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, res)
   }
 });
 
-app.delete('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, res) => {
+app.delete('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, requireModulo('cartera'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -893,7 +987,7 @@ app.delete('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, async (req, r
 // ════════════════════════════════
 // TECNICOS
 // ════════════════════════════════
-app.get('/api/tecnicos', tenantAuth, async (req, res) => {
+app.get('/api/tecnicos', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { activo } = req.query;
     let sql = 'SELECT * FROM tecnicos WHERE 1=1';
@@ -905,7 +999,7 @@ app.get('/api/tecnicos', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/tecnicos', tenantAuth, async (req, res) => {
+app.post('/api/tecnicos', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { id, nombre, telefono, comision_porcentaje } = req.body;
     if (!id || !nombre) return res.status(400).json({ error: 'Faltan campos' });
@@ -921,7 +1015,7 @@ app.post('/api/tecnicos', tenantAuth, async (req, res) => {
   }
 });
 
-app.put('/api/tecnicos/:id', tenantAuth, async (req, res) => {
+app.put('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { nombre, telefono, comision_porcentaje, activo } = req.body;
     const [old] = await req.tenantPool.query('SELECT id FROM tecnicos WHERE id=?', [req.params.id]);
@@ -935,7 +1029,7 @@ app.put('/api/tecnicos/:id', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/tecnicos/:id', tenantAuth, async (req, res) => {
+app.delete('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const [check] = await req.tenantPool.query('SELECT COUNT(*) as cnt FROM orden_prendas WHERE tecnico_id=?', [req.params.id]);
     if (check[0].cnt > 0) {
@@ -951,7 +1045,7 @@ app.delete('/api/tecnicos/:id', tenantAuth, async (req, res) => {
 
 // Resumen de comisiones por técnico: lo ganado en prendas ya entregadas, lo pagado y el
 // saldo (positivo = se le debe, negativo = saldo a favor del taller).
-app.get('/api/tecnicos/resumen', tenantAuth, async (req, res) => {
+app.get('/api/tecnicos/resumen', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     const [tecnicos] = await req.tenantPool.query('SELECT * FROM tecnicos ORDER BY nombre ASC');
@@ -986,7 +1080,7 @@ app.get('/api/tecnicos/resumen', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/tecnicos/:id/pagos', tenantAuth, async (req, res) => {
+app.get('/api/tecnicos/:id/pagos', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const [rows] = await req.tenantPool.query(
       "SELECT * FROM movimientos_caja WHERE tecnico_id=? AND categoria='Pago Técnico' ORDER BY COALESCE(fecha, DATE(created_at)) DESC, created_at DESC",
@@ -997,7 +1091,7 @@ app.get('/api/tecnicos/:id/pagos', tenantAuth, async (req, res) => {
 });
 
 // Registrar un pago (liquidación semanal) a un técnico, con fecha exacta
-app.post('/api/tecnicos/:id/pagos', tenantAuth, async (req, res) => {
+app.post('/api/tecnicos/:id/pagos', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { monto, metodo_pago, fecha, observaciones } = req.body;
     if (!monto || parseFloat(monto) <= 0) return res.status(400).json({ error: 'Monto inválido' });
@@ -1038,7 +1132,7 @@ function construirPrendaInsert(p, comisionDefaultMap) {
   return { precio, comisionPct, comisionMonto };
 }
 
-app.get('/api/ordenes', tenantAuth, async (req, res) => {
+app.get('/api/ordenes', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { estado, tecnico_id, cliente_id, monto_min, monto_max, busqueda } = req.query;
     let sql = 'SELECT DISTINCT o.* FROM ordenes_servicio o';
@@ -1078,7 +1172,7 @@ app.get('/api/ordenes', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/ordenes/:id', tenantAuth, async (req, res) => {
+app.get('/api/ordenes/:id', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const orden = await cargarOrdenCompleta(req.tenantPool, req.params.id);
     if (!orden) return res.status(404).json({ error: 'No encontrada' });
@@ -1088,7 +1182,7 @@ app.get('/api/ordenes/:id', tenantAuth, async (req, res) => {
 
 // Crear orden (recepción de la(s) prenda(s)). Opcionalmente registra el abono que deja
 // el cliente en ese momento.
-app.post('/api/ordenes', tenantAuth, async (req, res) => {
+app.post('/api/ordenes', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1151,7 +1245,7 @@ app.post('/api/ordenes', tenantAuth, async (req, res) => {
 });
 
 // Editar datos/prendas de una orden que aún está en Cotización (no liquidada)
-app.put('/api/ordenes/:id', tenantAuth, async (req, res) => {
+app.put('/api/ordenes/:id', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1193,7 +1287,7 @@ app.put('/api/ordenes/:id', tenantAuth, async (req, res) => {
   }
 });
 
-app.patch('/api/ordenes/:id/anular', tenantAuth, async (req, res) => {
+app.patch('/api/ordenes/:id/anular', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const [[orden]] = await req.tenantPool.query('SELECT estado FROM ordenes_servicio WHERE id=?', [req.params.id]);
     if (!orden) return res.status(404).json({ error: 'No encontrada' });
@@ -1205,7 +1299,7 @@ app.patch('/api/ordenes/:id/anular', tenantAuth, async (req, res) => {
 
 // Liquidar / entregar: cobra lo que falte (todo o en parte, financiando el resto igual que
 // un crédito normal) y genera la venta con el folio definitivo de la orden.
-app.post('/api/ordenes/:id/liquidar', tenantAuth, async (req, res) => {
+app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1306,7 +1400,7 @@ app.post('/api/ordenes/:id/liquidar', tenantAuth, async (req, res) => {
 // ════════════════════════════════
 // MOVIMIENTOS E INFORME
 // ════════════════════════════════
-app.post('/api/movimientos', tenantAuth, async (req, res) => {
+app.post('/api/movimientos', tenantAuth, requireModulo('egresos'), async (req, res) => {
   try {
     const { tipo, categoria, monto, metodo_pago, observaciones, fecha } = req.body;
     if(!tipo || !categoria || !monto) return res.status(400).json({ error: 'Faltan campos' });
@@ -1321,7 +1415,7 @@ app.post('/api/movimientos', tenantAuth, async (req, res) => {
 
 // Listado de movimientos de caja (usado por "Otros Egresos" para ver los gastos del día,
 // y en general para cualquier ingreso/egreso suelto con filtros de fecha/tipo/categoría).
-app.get('/api/movimientos', tenantAuth, async (req, res) => {
+app.get('/api/movimientos', tenantAuth, requireModulo('egresos'), async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, tipo, categoria } = req.query;
     let sql = 'SELECT * FROM movimientos_caja WHERE 1=1';
@@ -1338,7 +1432,7 @@ app.get('/api/movimientos', tenantAuth, async (req, res) => {
 // Borra un movimiento suelto (gasto del día o pago a técnico mal registrado). No se puede
 // borrar por aquí un movimiento que pertenece a un crédito/orden, porque esos ya tienen su
 // propio flujo de edición/eliminación de abonos.
-app.delete('/api/movimientos/:id', tenantAuth, async (req, res) => {
+app.delete('/api/movimientos/:id', tenantAuth, requireModulo('egresos'), async (req, res) => {
   try {
     const [[mov]] = await req.tenantPool.query('SELECT * FROM movimientos_caja WHERE id=?', [req.params.id]);
     if (!mov) return res.status(404).json({ error: 'No encontrado' });
@@ -1348,7 +1442,7 @@ app.delete('/api/movimientos/:id', tenantAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/informe', tenantAuth, async (req, res) => {
+app.get('/api/informe', tenantAuth, requireModulo('egresos'), async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     if(!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'Rango de fechas requerido' });
@@ -1428,7 +1522,7 @@ app.get('/api/informe', tenantAuth, async (req, res) => {
 
 // ── START ──
 // ================= CATALOGOS =================
-app.post('/api/catalogos', tenantAuth, async (req, res) => {
+app.post('/api/catalogos', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
     const { configuracion, productos } = req.body;
     const slug = Math.random().toString(36).substring(2, 8).toUpperCase();

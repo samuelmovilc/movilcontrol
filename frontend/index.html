@@ -863,6 +863,33 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <p style="font-size:11px;color:var(--text-light);margin-top:7px;line-height:1.4">Registra y edita los clientes para asignarles ventas o cr&eacute;ditos.</p>
       </div>
     </div>
+    <div class="card" id="card-vendedor" style="grid-column:1/-1">
+      <div class="card-header"><i class="fa-solid fa-user-tie"></i> Usuario Vendedor</div>
+      <div class="config-section">
+        <p style="font-size:11.5px;color:var(--text-light);margin:0 0 4px 0;line-height:1.4">Crea un usuario aparte para tu vendedor/empleado, con su propio usuario y contraseña, y marca a cuáles de estos módulos puede entrar. Lo que no marques, no lo puede ver ni usar.</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:700">
+            <input type="checkbox" id="vend-activo"> Usuario vendedor activo
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+          <div class="config-field"><label>Usuario</label><input type="text" id="vend-username" placeholder="Ej: vendedor1"></div>
+          <div class="config-field"><label>Contraseña</label><input type="text" id="vend-password" placeholder="Dejar en blanco para no cambiarla"></div>
+          <div class="config-field"><label>Nombre</label><input type="text" id="vend-nombre" placeholder="Nombre del empleado"></div>
+        </div>
+        <div style="margin:8px 0 4px 0"><b style="font-size:12.5px">Módulos permitidos</b></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px 10px" id="vend-modulos-grid">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="pos"> POS</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="caja"> Caja</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="cartera"> Cartera</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="productos"> Productos</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="ordenes"> Órdenes</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="egresos"> Egresos</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="config"> Config</label>
+        </div>
+        <button class="btn btn-primary" onclick="guardarVendedor()" style="margin-top:10px"><i class="fa-solid fa-floppy-disk"></i> Guardar Usuario Vendedor</button>
+      </div>
+    </div>
   </div>
   </div>
 </div>
@@ -1518,6 +1545,9 @@ async function saasLogin() {
       localStorage.setItem('saas_token', data.token);
       localStorage.setItem('saas_business', data.business_name);
       localStorage.setItem('saas_modules', JSON.stringify(data.modules));
+      localStorage.setItem('saas_role', data.role || 'owner');
+      localStorage.setItem('saas_vendedor_modulos', JSON.stringify(data.vendedor_modulos || []));
+      localStorage.setItem('saas_vendedor_nombre', data.vendedor_nombre || '');
       document.getElementById('saas-login-overlay').style.display = 'none';
       initApp(); // Iniciar la app normal
     } else {
@@ -1537,8 +1567,13 @@ function saasLogout() {
   localStorage.removeItem('saas_token');
   localStorage.removeItem('saas_business');
   localStorage.removeItem('saas_modules');
+  localStorage.removeItem('saas_role');
+  localStorage.removeItem('saas_vendedor_modulos');
+  localStorage.removeItem('saas_vendedor_nombre');
   location.reload();
 }
+
+function esVendedor() { return localStorage.getItem('saas_role') === 'vendedor'; }
 
 function checkModules() {
   const mods = JSON.parse(localStorage.getItem('saas_modules') || '{}');
@@ -1564,6 +1599,24 @@ function checkModules() {
     if (elOrdenes) elOrdenes.style.display = 'none';
     var elEgresos = document.getElementById('tab-egresos');
     if (elEgresos) elEgresos.style.display = 'none';
+  }
+
+  // Restricción adicional del usuario VENDEDOR: además de lo que el plan del
+  // negocio permite (arriba), si quien entró es el vendedor, solo ve las
+  // pestañas que el dueño le haya habilitado explícitamente en Configuración.
+  if (esVendedor()) {
+    var permitidos = JSON.parse(localStorage.getItem('saas_vendedor_modulos') || '[]');
+    var tabsReales = ['pos','caja','cartera','productos','ordenes','egresos','config'];
+    tabsReales.forEach(function(mod) {
+      if (permitidos.indexOf(mod) === -1) {
+        var el = document.getElementById('tab-' + mod);
+        if (el) el.style.display = 'none';
+      }
+    });
+    // Que entre directo al primer módulo que sí tenga permitido, en vez de
+    // quedar parado en POS (oculto) sin ver nada.
+    var primerPermitido = tabsReales.find(function(m){ return permitidos.indexOf(m) !== -1; });
+    if (primerPermitido && permitidos.indexOf('pos') === -1) showModule(primerPermitido);
   }
 
   // Update business name in UI if element exists
@@ -3294,7 +3347,52 @@ function loadConfigUI(){
   document.getElementById('cfg-ticket-size').value=cfg.tamano_ticket||'80mm';
   if(cfg.logo){var img=document.getElementById('logo-preview');img.src=cfg.logo;img.style.display='block'}
   renderPayMethods();
+  var cardVendedor=document.getElementById('card-vendedor');
+  if(cardVendedor){
+    if(esVendedor()){ cardVendedor.style.display='none'; } // un vendedor nunca ve ni edita esto
+    else { cardVendedor.style.display=''; loadVendedorUI(); }
+  }
 }
+
+async function loadVendedorUI(){
+  try{
+    var v=await apiGet('/vendedor');
+    document.getElementById('vend-activo').checked=!!Number(v.vendedor_activo);
+    document.getElementById('vend-username').value=v.vendedor_username||'';
+    document.getElementById('vend-password').value='';
+    document.getElementById('vend-nombre').value=v.vendedor_nombre||'';
+    var permitidos=v.vendedor_modulos||[];
+    document.querySelectorAll('.vend-mod-chk').forEach(function(chk){
+      chk.checked=permitidos.indexOf(chk.value)!==-1;
+    });
+  }catch(e){ console.error('Error cargando usuario vendedor:',e); }
+}
+
+async function guardarVendedor(){
+  var username=document.getElementById('vend-username').value.trim();
+  var password=document.getElementById('vend-password').value.trim();
+  var activo=document.getElementById('vend-activo').checked;
+  if(activo && !username){
+    toast('Pon un usuario para el vendedor antes de activarlo','error');
+    return;
+  }
+  var modulos=[];
+  document.querySelectorAll('.vend-mod-chk').forEach(function(chk){ if(chk.checked) modulos.push(chk.value); });
+  showLoading('Guardando usuario vendedor...');
+  try{
+    await apiPut('/vendedor',{
+      vendedor_username:username,
+      vendedor_password:password, // si va vacío, el backend deja la que ya tenía
+      vendedor_nombre:document.getElementById('vend-nombre').value.trim(),
+      vendedor_modulos:modulos,
+      vendedor_activo:activo
+    });
+    document.getElementById('vend-password').value='';
+    toast('Usuario vendedor guardado','success');
+  }catch(e){ toast('Error: '+e.message,'error'); }
+  hideLoading();
+}
+
 function loadLogo(input){
   var file=input.files[0];if(!file)return;
   var r=new FileReader();

@@ -28,6 +28,11 @@ async function setupSaaSDB() {
         is_active BOOLEAN DEFAULT TRUE,
         modules JSON,
         observations TEXT,
+        vendedor_username VARCHAR(100) NULL,
+        vendedor_password VARCHAR(255) NULL,
+        vendedor_nombre VARCHAR(150) NULL,
+        vendedor_modulos JSON NULL,
+        vendedor_activo BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
