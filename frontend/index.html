@@ -887,7 +887,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="egresos"> Egresos</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="config"> Config</label>
         </div>
-        <button class="btn btn-primary" onclick="guardarVendedor()" style="margin-top:10px"><i class="fa-solid fa-floppy-disk"></i> Guardar Usuario Vendedor</button>
+        <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="guardarVendedor()"><i class="fa-solid fa-floppy-disk"></i> Guardar Usuario Vendedor</button>
+          <button class="btn btn-secondary" onclick="copiarDatosVendedor()"><i class="fa-solid fa-copy"></i> Copiar datos de acceso</button>
+        </div>
       </div>
     </div>
   </div>
@@ -3387,10 +3390,47 @@ async function guardarVendedor(){
       vendedor_modulos:modulos,
       vendedor_activo:activo
     });
-    document.getElementById('vend-password').value='';
+    // Ojo: a propósito NO se borra el campo de contraseña después de guardar,
+    // para que el botón "Copiar datos de acceso" la pueda seguir copiando.
     toast('Usuario vendedor guardado','success');
   }catch(e){ toast('Error: '+e.message,'error'); }
   hideLoading();
+}
+
+function copiarDatosVendedor(){
+  var username=document.getElementById('vend-username').value.trim();
+  var password=document.getElementById('vend-password').value.trim();
+  if(!username){
+    toast('Pon el usuario del vendedor antes de copiar','error');
+    return;
+  }
+  if(!password){
+    toast('Escribe la contraseña en el campo antes de copiar (por seguridad no se vuelve a mostrar sola)','error');
+    return;
+  }
+  var url=window.location.origin+window.location.pathname;
+  var texto='Hola!\nAquí tienes tus datos de acceso al sistema:\n\nURL de ingreso: '+url+'\nUsuario: '+username+'\nContraseña: '+password;
+  function avisarCopiado(){ toast('Datos copiados, pégalos en WhatsApp','success'); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(texto).then(avisarCopiado).catch(function(){ copiarTextoFallback(texto,avisarCopiado); });
+  }else{
+    copiarTextoFallback(texto,avisarCopiado);
+  }
+}
+
+function copiarTextoFallback(texto,onOk){
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=texto;
+    ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.focus();ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    onOk();
+  }catch(e){
+    toast('No se pudo copiar automáticamente','error');
+  }
 }
 
 function loadLogo(input){
