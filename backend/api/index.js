@@ -1105,6 +1105,73 @@ app.post('/api/tecnicos/:id/pagos', tenantAuth, requireModulo('ordenes'), async 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Detalle de liquidación por técnico: cada orden con comisión + el pago que la cubrió.
+// Los pagos a técnicos son un monto global (no quedan ligados a órdenes puntuales), así que
+// esto se calcula al vuelo con una asignación FIFO por fecha: se ordenan las órdenes por fecha
+// de entrega (más antigua primero) y los pagos por fecha de pago, y se va "consumiendo" cada
+// pago contra las órdenes más viejas primero — exactamente la misma lógica que ya usa
+// /api/tecnicos/resumen para el saldo (ganado - pagado), solo que aquí queda desglosada
+// orden por orden y pago por pago. No requiere ninguna columna nueva ni migración.
+app.get('/api/tecnicos/:id/liquidacion-detalle', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+  try {
+    const tecnicoId = req.params.id;
+    const [[tec]] = await req.tenantPool.query('SELECT * FROM tecnicos WHERE id=?', [tecnicoId]);
+    if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
+
+    const [ordenesRaw] = await req.tenantPool.query(`
+      SELECT op.id as prenda_id, o.id as orden_id, o.folio, o.cliente, o.fecha_entregado, op.comision_monto
+      FROM orden_prendas op
+      JOIN ordenes_servicio o ON o.id = op.orden_id
+      WHERE op.tecnico_id=? AND op.estado='entregada' AND o.estado='terminada'
+      ORDER BY COALESCE(o.fecha_entregado, o.created_at) ASC, o.id ASC, op.id ASC
+    `, [tecnicoId]);
+
+    const [pagosRaw] = await req.tenantPool.query(`
+      SELECT * FROM movimientos_caja
+      WHERE tecnico_id=? AND categoria='Pago Técnico'
+      ORDER BY COALESCE(fecha, DATE(created_at)) ASC, created_at ASC, id ASC
+    `, [tecnicoId]);
+
+    const pagos = pagosRaw.map(p => Object.assign({}, p, { monto: parseFloat(p.monto) || 0, ordenes_cubiertas: [] }));
+    const ordenes = ordenesRaw.map(o => Object.assign({}, o, {
+      comision_monto: parseFloat(o.comision_monto) || 0,
+      liquidado: false,
+      pago_id: null
+    }));
+
+    let pagoIdx = 0;
+    let disponible = pagos.length ? pagos[0].monto : 0;
+    for (const orden of ordenes) {
+      let restante = orden.comision_monto;
+      while (restante > 0.0001 && pagoIdx < pagos.length) {
+        if (disponible <= 0.0001) {
+          pagoIdx++;
+          disponible = pagoIdx < pagos.length ? pagos[pagoIdx].monto : 0;
+          continue;
+        }
+        const usar = Math.min(restante, disponible);
+        restante -= usar;
+        disponible -= usar;
+      }
+      if (restante <= 0.0001 && pagoIdx < pagos.length) {
+        orden.liquidado = true;
+        orden.pago_id = pagos[pagoIdx].id;
+        pagos[pagoIdx].ordenes_cubiertas.push({ orden_id: orden.orden_id, folio: orden.folio, comision_monto: orden.comision_monto });
+      }
+    }
+
+    const totalGanado = ordenes.reduce((s, o) => s + o.comision_monto, 0);
+    const totalPagado = pagos.reduce((s, p) => s + p.monto, 0);
+
+    res.json({
+      tecnico: tec,
+      ordenes,
+      pagos,
+      totales: { ganado: totalGanado, pagado: totalPagado, saldo: totalGanado - totalPagado }
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ════════════════════════════════
 // ORDENES DE SERVICIO (sastrería: reparación / diseño de prendas)
 // ════════════════════════════════

@@ -1070,10 +1070,16 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
       <label style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase">Hasta</label>
       <input type="date" id="tecnicos-liq-hasta" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px" onchange="loadTecnicosResumen()">
       <button class="btn btn-secondary btn-xs" onclick="clearTecnicosLiqFiltro()"><i class="fa-solid fa-filter-circle-xmark"></i></button>
+      <label style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin-left:8px">Estado</label>
+      <select id="tecnicos-liq-filtro" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px" onchange="renderTecnicosResumen()">
+        <option value="todos">Todos</option>
+        <option value="pendiente">Con saldo pendiente</option>
+        <option value="liquidado">Liquidados</option>
+      </select>
     </div>
     <div class="tbl-wrap">
       <table style="font-size:12px">
-        <thead><tr><th>Técnico</th><th>Comisión Ganada</th><th>Pagado</th><th>Saldo</th><th>Acciones</th></tr></thead>
+        <thead><tr><th></th><th>Técnico</th><th>Comisión Ganada</th><th>Pagado</th><th>Saldo</th><th>Acciones</th></tr></thead>
         <tbody id="tecnicos-resumen-body"></tbody>
       </table>
     </div>
@@ -5063,6 +5069,9 @@ function clearTecnicosLiqFiltro(){
   loadTecnicosResumen();
 }
 
+var _tecnicosResumenCache = [];
+var _tecnicoDetalleCache = {}; // tecnico_id -> respuesta de /tecnicos/:id/liquidacion-detalle
+
 async function loadTecnicosResumen(){
   var desde = document.getElementById('tecnicos-liq-desde').value;
   var hasta = document.getElementById('tecnicos-liq-hasta').value;
@@ -5070,22 +5079,208 @@ async function loadTecnicosResumen(){
   if(desde && hasta){ params.push('fecha_inicio='+desde, 'fecha_fin='+hasta); }
   var resumen;
   try { resumen = await apiGet('/tecnicos/resumen'+(params.length?'?'+params.join('&'):'')); } catch(e) { toast('Error cargando liquidación de técnicos: '+e.message,'error'); return; }
+  _tecnicosResumenCache = resumen;
+  renderTecnicosResumen();
+}
+
+function renderTecnicosResumen(){
+  var filtro = document.getElementById('tecnicos-liq-filtro').value;
+  var resumen = _tecnicosResumenCache.filter(function(t){
+    if(filtro==='pendiente') return t.saldo > 0.5;
+    if(filtro==='liquidado') return t.saldo <= 0.5;
+    return true;
+  });
   var body = document.getElementById('tecnicos-resumen-body');
   if(!resumen.length){
-    body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:14px">No hay técnicos registrados.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">No hay técnicos para este filtro.</td></tr>';
     return;
   }
   body.innerHTML = resumen.map(function(t){
     var saldoClass = t.saldo > 0.5 ? 'tecnico-saldo-pos' : (t.saldo < -0.5 ? 'tecnico-saldo-neg' : '');
     var saldoLabel = t.saldo > 0.5 ? (fmt(t.saldo)+' (se le debe)') : (t.saldo < -0.5 ? (fmt(Math.abs(t.saldo))+' (a favor del taller)') : fmt(0));
+    var safeNombre = String(t.nombre).replace(/'/g,"\\'");
     return '<tr>'
+      + '<td><button class="btn btn-secondary btn-xs" id="tec-chev-'+t.id+'" onclick="toggleTecnicoDetalle(\''+t.id+'\')"><i class="fa-solid fa-chevron-down"></i></button></td>'
       + '<td>'+t.nombre+'</td>'
       + '<td>'+fmt(t.comision_ganada)+'</td>'
       + '<td>'+fmt(t.pagado)+'</td>'
       + '<td class="'+saldoClass+'">'+saldoLabel+'</td>'
-      + '<td><button class="btn btn-primary btn-xs" onclick="abrirPagoTecnico(\''+t.id+'\',\''+String(t.nombre).replace(/'/g,"\\'")+'\')"><i class="fa-solid fa-hand-holding-dollar"></i> Registrar pago</button></td>'
-      + '</tr>';
+      + '<td><button class="btn btn-primary btn-xs" onclick="abrirPagoTecnico(\''+t.id+'\',\''+safeNombre+'\')"><i class="fa-solid fa-hand-holding-dollar"></i> Registrar pago</button></td>'
+      + '</tr>'
+      + '<tr id="tec-det-'+t.id+'" style="display:none"><td colspan="6" style="padding:0;background:var(--surface2)"><div id="tec-det-'+t.id+'-content" style="padding:10px 14px"></div></td></tr>';
   }).join('');
+}
+
+async function toggleTecnicoDetalle(id){
+  var row = document.getElementById('tec-det-'+id);
+  var chev = document.getElementById('tec-chev-'+id);
+  var abierto = row.style.display !== 'none';
+  if(abierto){
+    row.style.display = 'none';
+    chev.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
+    return;
+  }
+  row.style.display = '';
+  chev.innerHTML = '<i class="fa-solid fa-chevron-up"></i>';
+  var content = document.getElementById('tec-det-'+id+'-content');
+  content.innerHTML = '<div style="padding:8px;color:var(--text-light);font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> Cargando detalle...</div>';
+  var det;
+  try { det = await apiGet('/tecnicos/'+id+'/liquidacion-detalle'); }
+  catch(e) { content.innerHTML = '<div style="padding:8px;color:#c0392b;font-size:12px">Error cargando detalle: '+e.message+'</div>'; return; }
+  _tecnicoDetalleCache[id] = det;
+  content.innerHTML = renderTecnicoDetalleHTML(det);
+}
+
+function renderTecnicoDetalleHTML(det){
+  var ordenesRows = det.ordenes.length ? det.ordenes.map(function(o){
+    var estado = o.liquidado
+      ? '<span style="color:#1a8a4a;font-weight:700"><i class="fa-solid fa-circle-check"></i> Liquidada</span>'
+      : '<span style="color:var(--text-light)">Pendiente</span>';
+    var accion = o.liquidado
+      ? '<button class="btn btn-secondary btn-xs" onclick="imprimirConstanciaPago(\''+det.tecnico.id+'\','+o.pago_id+')"><i class="fa-solid fa-file-pdf"></i> Constancia</button>'
+      : '—';
+    return '<tr>'
+      + '<td>'+(o.folio||('#'+o.orden_id))+'</td>'
+      + '<td>'+(o.cliente||'—')+'</td>'
+      + '<td>'+(o.fecha_entregado?fmtDate(o.fecha_entregado):'—')+'</td>'
+      + '<td>'+fmt(o.comision_monto)+'</td>'
+      + '<td>'+estado+'</td>'
+      + '<td>'+accion+'</td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:8px">Sin órdenes con comisión registradas.</td></tr>';
+
+  var pagosRows = det.pagos.length ? det.pagos.map(function(p){
+    var f = p.fecha || (p.created_at ? String(p.created_at).slice(0,10) : '');
+    return '<tr>'
+      + '<td>'+fmtDate(f)+'</td>'
+      + '<td>'+fmt(p.monto)+'</td>'
+      + '<td>'+(p.metodo_pago||'—')+'</td>'
+      + '<td>'+(p.observaciones||'—')+'</td>'
+      + '<td><button class="btn btn-secondary btn-xs" onclick="imprimirConstanciaPago(\''+det.tecnico.id+'\','+p.id+')"><i class="fa-solid fa-file-pdf"></i> Constancia</button></td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:8px">Sin pagos registrados.</td></tr>';
+
+  return ''
+    + '<div style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin-bottom:4px">Órdenes con comisión</div>'
+    + '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>Orden</th><th>Cliente</th><th>Fecha entrega</th><th>Comisión</th><th>Estado</th><th></th></tr></thead><tbody>'+ordenesRows+'</tbody></table></div>'
+    + '<div style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin:10px 0 4px">Pagos registrados</div>'
+    + '<div class="tbl-wrap"><table style="font-size:11.5px"><thead><tr><th>Fecha</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr></thead><tbody>'+pagosRows+'</tbody></table></div>';
+}
+
+function imprimirConstanciaPago(tecnicoId, pagoId){
+  var det = _tecnicoDetalleCache[tecnicoId];
+  if(!det){ toast('Abre primero el detalle del técnico','error'); return; }
+  var pago = det.pagos.find(function(p){ return String(p.id)===String(pagoId); });
+  if(!pago){ toast('No se encontró ese pago','error'); return; }
+  generarConstanciaPDF(det.tecnico, pago);
+}
+
+function generarConstanciaPDF(tecnico, pago){
+  var jsPDF=window.jspdf?window.jspdf.jsPDF:(window.jsPDF||null);
+  if(!jsPDF){toast('Error: jsPDF no cargó. Revisa tu conexión.','error');return;}
+  var cfg=configCache;
+  var nombreNeg=cfg.nombre_negocio||cfg.nombreNegocio||'ControlMovil';
+  var doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+  var pageWidth=210, margin=18, y=margin;
+
+  if(cfg.logo){
+    try{ doc.addImage(cfg.logo,'PNG',margin,y,30,18,undefined,'FAST'); }catch(e){}
+  }
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.setTextColor(33,28,184);
+  doc.text(String(nombreNeg).toUpperCase(), pageWidth-margin, y+8, {align:'right'});
+  var sub=[cfg.direccion,cfg.telefono].filter(Boolean).join(' · ');
+  if(sub){
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(sub, pageWidth-margin, y+14, {align:'right'});
+  }
+  doc.setTextColor(0);
+
+  y += 26;
+  doc.setDrawColor(200,200,200);
+  doc.setLineWidth(0.4);
+  doc.line(margin,y,pageWidth-margin,y);
+  y += 10;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14);
+  doc.text('CONSTANCIA DE LIQUIDACIÓN DE COMISIÓN', pageWidth/2, y, {align:'center'});
+  y += 10;
+
+  doc.setFontSize(10);
+  var fechaPago = pago.fecha || (pago.created_at ? String(pago.created_at).slice(0,10) : '');
+  var filas=[
+    ['Técnico', tecnico.nombre],
+    ['Fecha de pago', fmtDate(fechaPago)],
+    ['Monto pagado', fmt(pago.monto)],
+    ['Método de pago', pago.metodo_pago||'—']
+  ];
+  filas.forEach(function(f){
+    doc.setFont('helvetica','bold'); doc.text(f[0]+':', margin, y);
+    doc.setFont('helvetica','normal'); doc.text(String(f[1]), margin+45, y);
+    y+=6;
+  });
+  if(pago.observaciones){
+    doc.setFont('helvetica','bold'); doc.text('Observaciones:', margin, y);
+    doc.setFont('helvetica','normal');
+    var obsLines=doc.splitTextToSize(pago.observaciones, pageWidth-margin*2-45);
+    doc.text(obsLines, margin+45, y);
+    y += 6*obsLines.length;
+  }
+
+  y += 6;
+  doc.setDrawColor(230,230,230);
+  doc.line(margin,y,pageWidth-margin,y);
+  y += 8;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text('Órdenes cubiertas por este pago', margin, y);
+  y += 7;
+
+  var cubiertas = pago.ordenes_cubiertas || [];
+  if(!cubiertas.length){
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text('Este pago no cubre órdenes específicas (abono anticipado o saldo general).', margin, y);
+    doc.setTextColor(0);
+  } else {
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica','bold');
+    doc.text('Orden', margin, y);
+    doc.text('Comisión', pageWidth-margin, y, {align:'right'});
+    y += 5;
+    doc.setDrawColor(230,230,230);
+    doc.line(margin,y-3.5,pageWidth-margin,y-3.5);
+    doc.setFont('helvetica','normal');
+    var totalCub=0;
+    cubiertas.forEach(function(o){
+      doc.text(String(o.folio||('#'+o.orden_id)), margin, y);
+      doc.text(fmt(o.comision_monto), pageWidth-margin, y, {align:'right'});
+      totalCub += parseFloat(o.comision_monto)||0;
+      y += 5.5;
+      if(y > 270){ doc.addPage(); y = margin; }
+    });
+    y += 2;
+    doc.setDrawColor(200,200,200);
+    doc.line(margin,y,pageWidth-margin,y);
+    y += 6;
+    doc.setFont('helvetica','bold');
+    doc.text('Total', margin, y);
+    doc.text(fmt(totalCub), pageWidth-margin, y, {align:'right'});
+  }
+
+  y += 20;
+  doc.setDrawColor(0);
+  doc.line(margin, y, margin+70, y);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('Firma del técnico', margin, y+5);
+
+  doc.save('Constancia_'+String(tecnico.nombre).replace(/[^a-z0-9]+/gi,'_')+'_'+String(fechaPago||'').replace(/-/g,'')+'.pdf');
 }
 
 function abrirPagoTecnico(id, nombre){
@@ -5113,6 +5308,13 @@ async function confirmarPagoTecnico(){
     toast('Pago registrado','success');
     closeModal('modal-tecnico-pago');
     loadTecnicosResumen();
+    // Descarga de inmediato la constancia de este pago recién registrado.
+    try {
+      var det = await apiGet('/tecnicos/'+id+'/liquidacion-detalle');
+      _tecnicoDetalleCache[id] = det;
+      var pagoNuevo = det.pagos.reduce(function(best,p){ return (!best || p.id>best.id) ? p : best; }, null);
+      if(pagoNuevo) generarConstanciaPDF(det.tecnico, pagoNuevo);
+    } catch(e) { /* no bloquea el flujo si falla la generación de la constancia */ }
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
 </script>
