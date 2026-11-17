@@ -46,6 +46,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13
 .search-bar input:focus{border-color:var(--electric)}
 .tbl-wrap{overflow:auto;flex:1;min-height:0}
 table{width:100%;border-collapse:collapse;font-size:12px}
+/* Solo la tabla de productos del POS (Código/Nombre/Precio/Stock): letra un poco
+   más chica, sin tocar el tamaño de letra de ninguna otra tabla de la app. */
+#pos-productos-tabla,#pos-productos-tabla td{font-size:11px!important}
+#pos-productos-tabla thead th{font-size:10px!important}
 thead{position:sticky;top:0;z-index:5}
 thead th{background:var(--electric-pale);color:var(--electric-dark);font-weight:700;padding:6px 9px;text-align:left;border-bottom:2px solid var(--border-strong);white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
 tbody tr{transition:background .12s;border-bottom:1px solid var(--border)}
@@ -664,7 +668,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <button type="button" class="btn btn-secondary mobile-only barcode-cam-btn" style="padding:0 12px" onclick="openBarcodeCameraScanner('barcode-input')" title="Escanear con cámara"><i class="fa-solid fa-camera"></i></button>
         </div>
         <div class="tbl-wrap">
-          <table><thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Stock</th></tr></thead>
+          <table id="pos-productos-tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Stock</th></tr></thead>
           <tbody id="pos-products-body"></tbody></table>
         </div>
       </div>
