@@ -1162,6 +1162,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:700">Comisión ganada</div>
           <div id="pel-card-comision" style="font-size:22px;font-weight:800;color:var(--electric-dark)">$0</div>
         </div>
+        <div class="card" style="padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:700">Pendiente por liquidar</div>
+          <div id="pel-card-pendiente" style="font-size:22px;font-weight:800;color:#c0392b">$0</div>
+        </div>
       </div>
 
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:var(--surface2);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px">
@@ -5593,6 +5597,7 @@ async function loadPeluqueriaDetalle(){
     document.getElementById('pel-card-cantidad').textContent = totales.cantidad;
     document.getElementById('pel-card-vendido').textContent = fmt(totales.vendido);
     document.getElementById('pel-card-comision').textContent = fmt(totales.comision);
+    document.getElementById('pel-card-pendiente').textContent = fmt(Math.max(0, totales.saldo));
     document.getElementById('pel-pagado-label').textContent = fmt(totales.pagado);
     document.getElementById('pel-saldo-label').textContent = fmt(totales.saldo) + (totales.saldo>0.5?' (se le debe)':(totales.saldo<-0.5?' (a favor del negocio)':''));
 
@@ -5640,8 +5645,9 @@ async function loadPeluqueriaDetalle(){
   document.getElementById('pel-card-cantidad').textContent = resumenRow ? resumenRow.cantidad_ventas : 0;
   document.getElementById('pel-card-vendido').textContent = fmt(resumenRow ? resumenRow.valor_vendido : 0);
   document.getElementById('pel-card-comision').textContent = fmt(resumenRow ? resumenRow.comision_ganada : 0);
-  document.getElementById('pel-pagado-label').textContent = fmt(resumenRow ? resumenRow.pagado : 0);
   var saldo = resumenRow ? resumenRow.saldo : 0;
+  document.getElementById('pel-card-pendiente').textContent = fmt(Math.max(0, saldo));
+  document.getElementById('pel-pagado-label').textContent = fmt(resumenRow ? resumenRow.pagado : 0);
   document.getElementById('pel-saldo-label').textContent = fmt(saldo) + (saldo>0.5?' (se le debe)':(saldo<-0.5?' (a favor del negocio)':''));
 
   renderPeluqueriaVentasYPagos(det, desde, hasta, estado, false);
