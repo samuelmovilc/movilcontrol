@@ -1230,9 +1230,15 @@ app.get('/api/tecnicos/resumen-pos', tenantAuth, requireModulo('peluqueria'), as
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Detalle de liquidación por técnico: cada venta con comisión + el pago que la cubrió,
-// con la misma asignación FIFO por fecha que ya se usa en sastrería, pero calculada
-// sobre ventas.tecnico_id y pagos de categoría "Comisión POS" (fuentes separadas).
+// Redondeo a centavos consistente en todo este bloque: así lo que el detalle muestra
+// por venta es exactamente lo mismo que pagos-pos va a sumar y cobrar — nunca hay
+// diferencia de un centavo entre lo que el dueño ve marcado y lo que se liquida.
+function centavos(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+// Detalle de liquidación por técnico: cada venta con su comisión, y si ya está
+// liquidada, a qué pago quedó ligada. A diferencia de antes, esto YA NO se estima
+// por fecha (FIFO): sale de comision_pos_pagos_ventas, que guarda exactamente qué
+// ventas eligió el dueño al registrar cada pago (ver POST /pagos-pos más abajo).
 app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('peluqueria'), async (req, res) => {
   try {
     const tecnicoId = req.params.id;
@@ -1240,10 +1246,11 @@ app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('
     if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
 
     const [ventasRaw] = await req.tenantPool.query(`
-      SELECT v.id as venta_id, v.folio, v.cliente, v.fecha, v.total,
-             (v.total * t.comision_porcentaje / 100) as comision_monto
+      SELECT v.id as venta_id, v.folio, v.cliente, v.fecha, v.total, t.comision_porcentaje,
+             cpv.pago_id as pago_id
       FROM ventas v
       JOIN tecnicos t ON t.id = v.tecnico_id
+      LEFT JOIN comision_pos_pagos_ventas cpv ON cpv.venta_id = v.id
       WHERE v.tecnico_id=? AND v.estado='aceptada'
       ORDER BY v.fecha ASC, v.id ASC
     `, [tecnicoId]);
@@ -1254,33 +1261,31 @@ app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('
       ORDER BY COALESCE(fecha, DATE(created_at)) ASC, created_at ASC, id ASC
     `, [tecnicoId]);
 
-    const pagos = pagosRaw.map(p => Object.assign({}, p, { monto: parseFloat(p.monto) || 0, ventas_cubiertas: [] }));
-    const ventas = ventasRaw.map(v => Object.assign({}, v, {
-      comision_monto: parseFloat(v.comision_monto) || 0,
-      liquidado: false,
-      pago_id: null
-    }));
+    const [vinculos] = pagosRaw.length ? await req.tenantPool.query(`
+      SELECT cpv.pago_id, cpv.venta_id, cpv.comision_monto, v.folio
+      FROM comision_pos_pagos_ventas cpv
+      JOIN ventas v ON v.id = cpv.venta_id
+      WHERE cpv.pago_id IN (?)
+    `, [pagosRaw.map(p => p.id)]) : [[]];
 
-    let pagoIdx = 0;
-    let disponible = pagos.length ? pagos[0].monto : 0;
-    for (const venta of ventas) {
-      let restante = venta.comision_monto;
-      while (restante > 0.0001 && pagoIdx < pagos.length) {
-        if (disponible <= 0.0001) {
-          pagoIdx++;
-          disponible = pagoIdx < pagos.length ? pagos[pagoIdx].monto : 0;
-          continue;
-        }
-        const usar = Math.min(restante, disponible);
-        restante -= usar;
-        disponible -= usar;
-      }
-      if (restante <= 0.0001 && pagoIdx < pagos.length) {
-        venta.liquidado = true;
-        venta.pago_id = pagos[pagoIdx].id;
-        pagos[pagoIdx].ventas_cubiertas.push({ venta_id: venta.venta_id, folio: venta.folio, comision_monto: venta.comision_monto });
-      }
-    }
+    const pagos = pagosRaw.map(p => Object.assign({}, p, { monto: parseFloat(p.monto) || 0, ventas_cubiertas: [] }));
+    const pagosPorId = {};
+    pagos.forEach(p => { pagosPorId[p.id] = p; });
+    vinculos.forEach(v => {
+      const pago = pagosPorId[v.pago_id];
+      if (pago) pago.ventas_cubiertas.push({ venta_id: v.venta_id, folio: v.folio, comision_monto: centavos(v.comision_monto) });
+    });
+
+    const ventas = ventasRaw.map(v => ({
+      venta_id: v.venta_id,
+      folio: v.folio,
+      cliente: v.cliente,
+      fecha: v.fecha,
+      total: v.total,
+      comision_monto: centavos(v.total * v.comision_porcentaje / 100),
+      liquidado: v.pago_id !== null,
+      pago_id: v.pago_id
+    }));
 
     const totalGanado = ventas.reduce((s, v) => s + v.comision_monto, 0);
     const totalPagado = pagos.reduce((s, p) => s + p.monto, 0);
@@ -1289,25 +1294,95 @@ app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('
       tecnico: tec,
       ventas,
       pagos,
-      totales: { ganado: totalGanado, pagado: totalPagado, saldo: totalGanado - totalPagado }
+      totales: { ganado: centavos(totalGanado), pagado: centavos(totalPagado), saldo: centavos(totalGanado - totalPagado) }
     });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Registrar un pago de comisión de ventas del POS a un técnico. Usa la categoría
-// "Comisión POS" (distinta de "Pago Técnico") para no mezclarse con sastrería.
+// Registrar un pago de comisión de ventas del POS a un técnico, liquidando EXACTAMENTE
+// las ventas que el dueño marcó (venta_ids) — nunca un monto libre. El monto lo calcula
+// el servidor sumando la comisión real de esas ventas, así nunca se puede pagar de más
+// ni de menos de lo seleccionado. Si cualquiera de las ventas elegidas ya fue liquidada
+// por otro pago, se rechaza TODA la operación (no se liquida ni una sola).
+// Usa la categoría "Comisión POS" (distinta de "Pago Técnico") para no mezclarse con
+// sastrería, y la UNIQUE KEY de comision_pos_pagos_ventas.venta_id es el respaldo final
+// a nivel de base de datos contra una doble liquidación (incluso ante una carrera entre
+// dos pagos simultáneos).
 app.post('/api/tecnicos/:id/pagos-pos', tenantAuth, requireModulo('peluqueria'), async (req, res) => {
+  const conn = await req.tenantPool.getConnection();
   try {
-    const { monto, metodo_pago, fecha, observaciones } = req.body;
-    if (!monto || parseFloat(monto) <= 0) return res.status(400).json({ error: 'Monto inválido' });
-    const [[tec]] = await req.tenantPool.query('SELECT id FROM tecnicos WHERE id=?', [req.params.id]);
-    if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
-    const [result] = await req.tenantPool.query(
-      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, tecnico_id, fecha) VALUES ("egreso","Comisión POS",?,?,?,?,?)',
-      [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || '', req.params.id, fecha || null]
+    const { venta_ids, metodo_pago, fecha, observaciones } = req.body;
+    const tecnicoId = req.params.id;
+    if (!Array.isArray(venta_ids) || !venta_ids.length) {
+      conn.release();
+      return res.status(400).json({ error: 'Selecciona al menos una venta para liquidar' });
+    }
+
+    const [[tec]] = await conn.query('SELECT id, comision_porcentaje FROM tecnicos WHERE id=?', [tecnicoId]);
+    if (!tec) { conn.release(); return res.status(404).json({ error: 'Técnico no encontrado' }); }
+
+    await conn.beginTransaction();
+
+    // Bloquea las filas de estas ventas mientras dura la transacción, para que un
+    // segundo pago simultáneo sobre las mismas ventas tenga que esperar en vez de
+    // leer datos ya obsoletos.
+    const [ventas] = await conn.query(
+      `SELECT v.id, v.total, v.tecnico_id, v.estado FROM ventas v WHERE v.id IN (?) FOR UPDATE`,
+      [venta_ids]
     );
-    res.status(201).json({ ok: true, id: result.insertId });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+    if (ventas.length !== venta_ids.length) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: 'Una o más ventas seleccionadas no existen' });
+    }
+    const invalida = ventas.find(v => String(v.tecnico_id) !== String(tecnicoId) || v.estado !== 'aceptada');
+    if (invalida) {
+      await conn.rollback(); conn.release();
+      return res.status(409).json({ error: 'Una o más ventas seleccionadas no pertenecen a este técnico o no están vigentes' });
+    }
+
+    const [yaLiquidadas] = await conn.query(
+      'SELECT venta_id FROM comision_pos_pagos_ventas WHERE venta_id IN (?)',
+      [venta_ids]
+    );
+    if (yaLiquidadas.length) {
+      await conn.rollback(); conn.release();
+      return res.status(409).json({ error: 'Una o más ventas seleccionadas ya fueron liquidadas en otro pago. No se procesó nada.' });
+    }
+
+    const pct = parseFloat(tec.comision_porcentaje) || 0;
+    const detalle = ventas.map(v => ({ venta_id: v.id, comision_monto: centavos(v.total * pct / 100) }));
+    const montoTotal = centavos(detalle.reduce((s, d) => s + d.comision_monto, 0));
+    if (montoTotal <= 0) {
+      await conn.rollback(); conn.release();
+      return res.status(400).json({ error: 'El total a liquidar debe ser mayor a cero' });
+    }
+
+    const [result] = await conn.query(
+      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, tecnico_id, fecha) VALUES ("egreso","Comisión POS",?,?,?,?,?)',
+      [montoTotal, metodo_pago || 'Efectivo', observaciones || '', tecnicoId, fecha || null]
+    );
+    const pagoId = result.insertId;
+
+    for (const d of detalle) {
+      await conn.query(
+        'INSERT INTO comision_pos_pagos_ventas (pago_id, venta_id, comision_monto) VALUES (?,?,?)',
+        [pagoId, d.venta_id, d.comision_monto]
+      );
+    }
+
+    await conn.commit();
+    res.status(201).json({ ok: true, id: pagoId, monto: montoTotal, ventas_liquidadas: detalle.length });
+  } catch(e) {
+    try { await conn.rollback(); } catch(e2) {}
+    // La UNIQUE KEY de venta_id es el respaldo final: si dos pagos chocan por la misma
+    // venta, acá es donde se ve y se rechaza todo, sin dejar nada a medias.
+    if (e.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Una o más ventas seleccionadas ya fueron liquidadas en otro pago. No se procesó nada.' });
+    }
+    res.status(500).json({ error: e.message });
+  } finally {
+    conn.release();
+  }
 });
 
 // ════════════════════════════════
@@ -1936,6 +2011,14 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         comision_porcentaje DECIMAL(5,2) NOT NULL DEFAULT 0,
         activo BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS comision_pos_pagos_ventas (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pago_id INT NOT NULL,
+        venta_id INT NOT NULL,
+        comision_monto DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_venta_liquidada (venta_id)
       );
       CREATE TABLE IF NOT EXISTS ordenes_servicio (
         id INT AUTO_INCREMENT PRIMARY KEY,

@@ -1133,15 +1133,19 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           Pagado: <strong id="pel-pagado-label">$0</strong> &nbsp;·&nbsp;
           Saldo: <strong id="pel-saldo-label">$0</strong>
         </div>
-        <button class="btn btn-primary btn-xs" onclick="abrirPagoTecnicoPOS()"><i class="fa-solid fa-hand-holding-dollar"></i> Liquidar comisión</button>
       </div>
 
       <div style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin-bottom:4px">Ventas</div>
+      <div style="font-size:11px;color:var(--text-light);margin-bottom:6px">Marca con el check las ventas que quieres liquidar. No puedes marcar una ya liquidada junto con pendientes: el pago se calcula exacto, solo por lo seleccionado.</div>
       <div class="tbl-wrap">
         <table style="font-size:11.5px">
-          <thead><tr><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
           <tbody id="pel-ventas-body"></tbody>
         </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:var(--surface2);padding:10px 14px;border-radius:var(--radius-sm);margin:8px 0 12px">
+        <div style="font-size:12.5px"><span id="pel-sel-cantidad">0</span> seleccionadas &nbsp;·&nbsp; Total a liquidar: <strong id="pel-sel-total">$0</strong></div>
+        <button class="btn btn-primary btn-xs" id="pel-btn-liquidar" onclick="abrirPagoTecnicoPOS()" disabled><i class="fa-solid fa-hand-holding-dollar"></i> Liquidar seleccionadas</button>
       </div>
 
       <div style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin:10px 0 4px">Pagos registrados</div>
@@ -1602,7 +1606,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <div class="modal-header"><span><i class="fa-solid fa-hand-holding-dollar"></i> Liquidar comisión a <span id="tpp-nombre"></span></span><button class="modal-close" onclick="closeModal('modal-tecnico-pago-pos')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:8px">
       <input type="hidden" id="tpp-tecnico-id">
-      <div class="form-group"><label>Monto</label><input type="number" id="tpp-monto" min="0" step="0.01"></div>
+      <div style="background:var(--surface2);padding:10px 12px;border-radius:var(--radius-sm);font-size:13px">
+        Vas a liquidar <strong id="tpp-cantidad">0</strong> venta(s) por un total de <strong id="tpp-total">$0</strong>.
+        <div style="font-size:11px;color:var(--text-light);margin-top:4px">Este monto no se puede cambiar: es exactamente la suma de lo seleccionado.</div>
+      </div>
       <div class="form-group"><label>Método</label><select id="tpp-metodo"></select></div>
       <div class="form-group"><label>Fecha de pago</label><input type="date" id="tpp-fecha"></div>
       <div class="form-group"><label>Observaciones</label><input type="text" id="tpp-obs" placeholder="Opcional"></div>
@@ -5447,6 +5454,7 @@ async function confirmarPagoTecnico(){
    /tecnicos/:id/pagos-pos, que nunca tocan los números de sastrería.
    ═══════════════════════════════════════════════════════════════ */
 var _pelDetalleCache = null; // detalle del técnico actualmente seleccionado en Peluquería
+var _pelSeleccion = new Map(); // venta_id (string) -> comision_monto, de las ventas marcadas para liquidar
 
 async function loadPeluqueriaUI(){
   if(!tecnicosCache.length){
@@ -5491,6 +5499,7 @@ async function loadPeluqueriaDetalle(){
   } catch(e) { toast('Error cargando comisiones: '+e.message,'error'); return; }
 
   _pelDetalleCache = det;
+  _pelSeleccion = new Map(); // cambió el técnico o el filtro: se limpia la selección anterior
 
   document.getElementById('pel-card-cantidad').textContent = resumenRow ? resumenRow.cantidad_ventas : 0;
   document.getElementById('pel-card-vendido').textContent = fmt(resumenRow ? resumenRow.valor_vendido : 0);
@@ -5519,7 +5528,12 @@ function renderPeluqueriaVentasYPagos(det, desde, hasta){
     var accion = v.liquidado
       ? '<button class="btn btn-secondary btn-xs" onclick="imprimirConstanciaPOS(\''+det.tecnico.id+'\','+v.pago_id+')"><i class="fa-solid fa-file-pdf"></i> Constancia</button>'
       : '—';
+    // Solo las ventas pendientes llevan checkbox: una ya liquidada nunca se puede volver
+    // a marcar, así es imposible mezclarla con pendientes en una misma liquidación.
+    var marcada = _pelSeleccion.has(String(v.venta_id));
+    var check = v.liquidado ? '' : '<input type="checkbox" '+(marcada?'checked':'')+' onchange="togglePelVenta(\''+v.venta_id+'\','+v.comision_monto+',this.checked)">';
     return '<tr>'
+      + '<td>'+check+'</td>'
       + '<td>'+(v.folio||('#'+v.venta_id))+'</td>'
       + '<td>'+(v.cliente||'—')+'</td>'
       + '<td>'+fmtDate(v.fecha)+'</td>'
@@ -5528,7 +5542,8 @@ function renderPeluqueriaVentasYPagos(det, desde, hasta){
       + '<td>'+estado+'</td>'
       + '<td>'+accion+'</td>'
       + '</tr>';
-  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:8px">Sin ventas en este rango.</td></tr>';
+  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:8px">Sin ventas en este rango.</td></tr>';
+  actualizarPelSeleccionUI();
 
   var pagosFiltrados = det.pagos.filter(function(p){
     var f = p.fecha || (p.created_at ? String(p.created_at).slice(0,10) : '');
@@ -5548,13 +5563,38 @@ function renderPeluqueriaVentasYPagos(det, desde, hasta){
   }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:8px">Sin pagos en este rango.</td></tr>';
 }
 
+// Marca/desmarca una venta pendiente para la próxima liquidación. _pelSeleccion
+// guarda venta_id -> comision_monto exactamente como vino del backend, así el
+// total a liquidar siempre es la suma literal de lo que el dueño marcó, nunca
+// un número aparte que alguien pueda escribir a mano.
+function togglePelVenta(ventaId, comisionMonto, checked){
+  if(checked) _pelSeleccion.set(String(ventaId), Number(comisionMonto)||0);
+  else _pelSeleccion.delete(String(ventaId));
+  actualizarPelSeleccionUI();
+}
+
+function actualizarPelSeleccionUI(){
+  var cant = _pelSeleccion.size;
+  var total = 0;
+  _pelSeleccion.forEach(function(m){ total += m; });
+  total = Math.round(total*100)/100;
+  document.getElementById('pel-sel-cantidad').textContent = cant;
+  document.getElementById('pel-sel-total').textContent = fmt(total);
+  document.getElementById('pel-btn-liquidar').disabled = cant===0;
+}
+
 function abrirPagoTecnicoPOS(){
   var tecId = document.getElementById('pel-tecnico').value;
   if(!tecId){ toast('Elige un técnico','error'); return; }
+  if(!_pelSeleccion.size){ toast('Marca al menos una venta para liquidar','error'); return; }
   var nombre = _pelDetalleCache ? _pelDetalleCache.tecnico.nombre : '';
+  var total = 0;
+  _pelSeleccion.forEach(function(m){ total += m; });
+  total = Math.round(total*100)/100;
   document.getElementById('tpp-tecnico-id').value = tecId;
   document.getElementById('tpp-nombre').textContent = nombre;
-  document.getElementById('tpp-monto').value = '';
+  document.getElementById('tpp-cantidad').textContent = _pelSeleccion.size;
+  document.getElementById('tpp-total').textContent = fmt(total);
   populateMetodoSelect('tpp-metodo');
   document.getElementById('tpp-fecha').value = todayStr();
   document.getElementById('tpp-obs').value = '';
@@ -5563,10 +5603,9 @@ function abrirPagoTecnicoPOS(){
 
 async function confirmarPagoTecnicoPOS(){
   var id = document.getElementById('tpp-tecnico-id').value;
-  var monto = parseFloat(document.getElementById('tpp-monto').value);
-  if(!monto || monto<=0){ toast('Indica un monto válido','error'); return; }
+  if(!_pelSeleccion.size){ toast('No hay ventas seleccionadas','error'); return; }
   var payload = {
-    monto: monto,
+    venta_ids: Array.from(_pelSeleccion.keys()),
     metodo_pago: document.getElementById('tpp-metodo').value,
     fecha: document.getElementById('tpp-fecha').value || todayStr(),
     observaciones: document.getElementById('tpp-obs').value.trim()
@@ -5575,6 +5614,7 @@ async function confirmarPagoTecnicoPOS(){
     await apiPost('/tecnicos/'+id+'/pagos-pos', payload);
     toast('Pago registrado','success');
     closeModal('modal-tecnico-pago-pos');
+    _pelSeleccion = new Map();
     await loadPeluqueriaDetalle();
     // Descarga de inmediato la constancia de este pago recién registrado.
     try {
