@@ -5586,18 +5586,23 @@ async function loadPeluqueriaDetalle(){
     } catch(e) { toast('Error cargando comisiones: '+e.message,'error'); return; }
 
     var totales = resumenTodos.reduce(function(acc,r){
+      var saldoTec = Number(r.saldo)||0;
       acc.cantidad += Number(r.cantidad_ventas)||0;
       acc.vendido += Number(r.valor_vendido)||0;
       acc.comision += Number(r.comision_ganada)||0;
       acc.pagado += Number(r.pagado)||0;
-      acc.saldo += Number(r.saldo)||0;
+      acc.saldo += saldoTec;
+      // Lo pendiente por pagar se suma técnico por técnico, NUNCA neteando: si a un
+      // técnico se le debe y a otro se le pagó de más, lo segundo no puede "tapar"
+      // lo primero — cada saldo positivo es plata real que ese técnico aún espera.
+      acc.pendiente += Math.max(0, saldoTec);
       return acc;
-    }, {cantidad:0, vendido:0, comision:0, pagado:0, saldo:0});
+    }, {cantidad:0, vendido:0, comision:0, pagado:0, saldo:0, pendiente:0});
 
     document.getElementById('pel-card-cantidad').textContent = totales.cantidad;
     document.getElementById('pel-card-vendido').textContent = fmt(totales.vendido);
     document.getElementById('pel-card-comision').textContent = fmt(totales.comision);
-    document.getElementById('pel-card-pendiente').textContent = fmt(Math.max(0, totales.saldo));
+    document.getElementById('pel-card-pendiente').textContent = fmt(totales.pendiente);
     document.getElementById('pel-pagado-label').textContent = fmt(totales.pagado);
     document.getElementById('pel-saldo-label').textContent = fmt(totales.saldo) + (totales.saldo>0.5?' (se le debe)':(totales.saldo<-0.5?' (a favor del negocio)':''));
 
