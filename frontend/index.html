@@ -1099,6 +1099,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 <div class="grid-layout">
   <div class="card" style="grid-column:1/-1">
     <div class="card-header"><i class="fa-solid fa-user-gear"></i> Técnicos / Comisión por venta</div>
+    <div style="padding:0 14px 14px">
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:10px 0">
       <button class="btn btn-secondary" onclick="abrirModalTecnicos()"><i class="fa-solid fa-user-gear"></i> Técnicos</button>
       <div class="form-group" style="min-width:200px"><label>Técnico</label><select id="pel-tecnico" onchange="loadPeluqueriaDetalle()"></select></div>
@@ -1112,7 +1113,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     </div>
 
     <div id="pel-contenido" style="display:none">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:10px 0">
         <div class="card" style="padding:12px;text-align:center">
           <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:700">Cantidad de ventas</div>
           <div id="pel-card-cantidad" style="font-size:22px;font-weight:800;color:var(--electric-dark)">0</div>
@@ -1150,6 +1151,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <tbody id="pel-pagos-body"></tbody>
         </table>
       </div>
+    </div>
     </div>
   </div>
 </div>
