@@ -443,7 +443,7 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
-    const { folio, fecha, hora, cliente, observaciones, metodo_pago, metodos_pago, total, cambio, productos } = req.body;
+    const { folio, fecha, hora, cliente, observaciones, metodo_pago, metodos_pago, total, cambio, productos, tecnico_id } = req.body;
     if (!folio||!fecha||!hora||!total||!productos?.length) {
       await conn.rollback(); conn.release();
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
@@ -482,9 +482,11 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
     }
 
     // Insertar venta
+    // tecnico_id es exclusivo del módulo Peluquería (quién atendió la venta); opcional,
+    // NULL si no se manda (tiendas y demás negocios que no usan esto no se ven afectados).
     const [result] = await conn.query(
-      'INSERT INTO ventas (folio,fecha,hora,cliente,cliente_id,observaciones,metodo_pago,metodos_pago,total,cambio,estado,estado_pago) VALUES (?,?,?,?,?,?,?,?,?,?,"aceptada",?)',
-      [folio, fecha, hora, clienteStr, clienteId, observaciones||'', metodoPagoSafe, JSON.stringify(metodos_pago||[]), total, cambio||0, estadoPago]
+      'INSERT INTO ventas (folio,fecha,hora,cliente,cliente_id,observaciones,metodo_pago,metodos_pago,total,cambio,estado,estado_pago,tecnico_id) VALUES (?,?,?,?,?,?,?,?,?,?,"aceptada",?,?)',
+      [folio, fecha, hora, clienteStr, clienteId, observaciones||'', metodoPagoSafe, JSON.stringify(metodos_pago||[]), total, cambio||0, estadoPago, tecnico_id || null]
     );
     const ventaId = result.insertId;
     // Insertar detalle + descontar stock
@@ -605,11 +607,15 @@ app.get('/api/configuracion', tenantAuth, async (req, res) => {
 
 app.put('/api/configuracion/:id', tenantAuth, requireModulo('config'), async (req, res) => {
   try {
-    const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket, mostrar_nombre_tirilla, mostrar_direccion_tirilla, mostrar_telefono_tirilla } = req.body;
+    const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket, mostrar_nombre_tirilla, mostrar_direccion_tirilla, mostrar_telefono_tirilla, pos_atendido_por } = req.body;
     const flag = (v) => v===undefined || v===null ? true : !!v;
+    // A diferencia de las de arriba (que por defecto son visibles), pos_atendido_por es
+    // exclusiva del módulo Peluquería y debe quedar APAGADA si no se manda explícitamente,
+    // para no activarle el selector del POS a nadie que no lo haya pedido.
+    const flagOff = (v) => !!v;
     await req.tenantPool.query(
-      'UPDATE configuracion SET nombre_negocio=?,direccion=?,telefono=?,logo=?,metodos_pago=?,mensaje_tirilla=?,stock_critico=?,tamano_ticket=?,mostrar_nombre_tirilla=?,mostrar_direccion_tirilla=?,mostrar_telefono_tirilla=? WHERE id=?',
-      [nombre_negocio, direccion, telefono, logo||null, JSON.stringify(metodos_pago||[]), mensaje_tirilla, stock_critico||10, tamano_ticket||'80mm', flag(mostrar_nombre_tirilla), flag(mostrar_direccion_tirilla), flag(mostrar_telefono_tirilla), req.params.id]
+      'UPDATE configuracion SET nombre_negocio=?,direccion=?,telefono=?,logo=?,metodos_pago=?,mensaje_tirilla=?,stock_critico=?,tamano_ticket=?,mostrar_nombre_tirilla=?,mostrar_direccion_tirilla=?,mostrar_telefono_tirilla=?,pos_atendido_por=? WHERE id=?',
+      [nombre_negocio, direccion, telefono, logo||null, JSON.stringify(metodos_pago||[]), mensaje_tirilla, stock_critico||10, tamano_ticket||'80mm', flag(mostrar_nombre_tirilla), flag(mostrar_direccion_tirilla), flag(mostrar_telefono_tirilla), flagOff(pos_atendido_por), req.params.id]
     );
     const [rows] = await req.tenantPool.query('SELECT * FROM configuracion WHERE id=?', [req.params.id]);
     res.json(rows[0]);
@@ -987,7 +993,7 @@ app.delete('/api/creditos/:creditoId/abonos/:abonoId', tenantAuth, requireModulo
 // ════════════════════════════════
 // TECNICOS
 // ════════════════════════════════
-app.get('/api/tecnicos', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+app.get('/api/tecnicos', tenantAuth, requireModulo('ordenes','peluqueria'), async (req, res) => {
   try {
     const { activo } = req.query;
     let sql = 'SELECT * FROM tecnicos WHERE 1=1';
@@ -999,7 +1005,7 @@ app.get('/api/tecnicos', tenantAuth, requireModulo('ordenes'), async (req, res) 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/tecnicos', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+app.post('/api/tecnicos', tenantAuth, requireModulo('ordenes','peluqueria'), async (req, res) => {
   try {
     const { id, nombre, telefono, comision_porcentaje } = req.body;
     if (!id || !nombre) return res.status(400).json({ error: 'Faltan campos' });
@@ -1015,7 +1021,7 @@ app.post('/api/tecnicos', tenantAuth, requireModulo('ordenes'), async (req, res)
   }
 });
 
-app.put('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+app.put('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes','peluqueria'), async (req, res) => {
   try {
     const { nombre, telefono, comision_porcentaje, activo } = req.body;
     const [old] = await req.tenantPool.query('SELECT id FROM tecnicos WHERE id=?', [req.params.id]);
@@ -1029,7 +1035,7 @@ app.put('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes'), async (req, r
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+app.delete('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes','peluqueria'), async (req, res) => {
   try {
     const [check] = await req.tenantPool.query('SELECT COUNT(*) as cnt FROM orden_prendas WHERE tecnico_id=?', [req.params.id]);
     if (check[0].cnt > 0) {
@@ -1169,6 +1175,138 @@ app.get('/api/tecnicos/:id/liquidacion-detalle', tenantAuth, requireModulo('orde
       pagos,
       totales: { ganado: totalGanado, pagado: totalPagado, saldo: totalGanado - totalPagado }
     });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════
+// PELUQUERÍA: comisión de técnicos por VENTAS del POS
+// ════════════════════════════════
+// Totalmente independiente de las comisiones de Órdenes de Servicio (sastrería)
+// de arriba: usa su propia fuente de "ganado" (ventas.tecnico_id, no orden_prendas)
+// y su propia categoría de pago en movimientos_caja ("Comisión POS", nunca "Pago
+// Técnico") para que los números de sastrería que ya están en producción no se
+// toquen ni se mezclen con esto.
+
+// Resumen por técnico de lo ganado en ventas del POS, lo pagado y el saldo.
+app.get('/api/tecnicos/resumen-pos', tenantAuth, requireModulo('peluqueria'), async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    const [tecnicos] = await req.tenantPool.query('SELECT * FROM tecnicos ORDER BY nombre ASC');
+
+    let ventasSql = `
+      SELECT v.tecnico_id, COUNT(*) as cantidad, SUM(v.total) as vendido,
+             SUM(v.total * t.comision_porcentaje / 100) as ganado
+      FROM ventas v
+      JOIN tecnicos t ON t.id = v.tecnico_id
+      WHERE v.tecnico_id IS NOT NULL AND v.estado='aceptada'`;
+    const vParams = [];
+    if (fecha_inicio && fecha_fin) { ventasSql += ' AND v.fecha BETWEEN ? AND ?'; vParams.push(fecha_inicio, fecha_fin); }
+    ventasSql += ' GROUP BY v.tecnico_id';
+    const [ventas] = await req.tenantPool.query(ventasSql, vParams);
+    const ventasMap = {};
+    ventas.forEach(v => { ventasMap[v.tecnico_id] = { cantidad: v.cantidad, vendido: parseFloat(v.vendido) || 0, ganado: parseFloat(v.ganado) || 0 }; });
+
+    let pagadoSql = `SELECT tecnico_id, SUM(monto) as pagado FROM movimientos_caja
+      WHERE tipo='egreso' AND categoria='Comisión POS' AND tecnico_id IS NOT NULL`;
+    const pParams = [];
+    if (fecha_inicio && fecha_fin) { pagadoSql += ' AND COALESCE(fecha, DATE(created_at)) BETWEEN ? AND ?'; pParams.push(fecha_inicio, fecha_fin); }
+    pagadoSql += ' GROUP BY tecnico_id';
+    const [pagado] = await req.tenantPool.query(pagadoSql, pParams);
+    const pagadoMap = {};
+    pagado.forEach(p => { pagadoMap[p.tecnico_id] = parseFloat(p.pagado) || 0; });
+
+    const resumen = tecnicos.map(t => {
+      const v = ventasMap[t.id] || { cantidad: 0, vendido: 0, ganado: 0 };
+      const pagado2 = pagadoMap[t.id] || 0;
+      return Object.assign({}, t, {
+        cantidad_ventas: v.cantidad,
+        valor_vendido: v.vendido,
+        comision_ganada: v.ganado,
+        pagado: pagado2,
+        saldo: v.ganado - pagado2
+      });
+    });
+    res.json(resumen);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Detalle de liquidación por técnico: cada venta con comisión + el pago que la cubrió,
+// con la misma asignación FIFO por fecha que ya se usa en sastrería, pero calculada
+// sobre ventas.tecnico_id y pagos de categoría "Comisión POS" (fuentes separadas).
+app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('peluqueria'), async (req, res) => {
+  try {
+    const tecnicoId = req.params.id;
+    const [[tec]] = await req.tenantPool.query('SELECT * FROM tecnicos WHERE id=?', [tecnicoId]);
+    if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
+
+    const [ventasRaw] = await req.tenantPool.query(`
+      SELECT v.id as venta_id, v.folio, v.cliente, v.fecha, v.total,
+             (v.total * t.comision_porcentaje / 100) as comision_monto
+      FROM ventas v
+      JOIN tecnicos t ON t.id = v.tecnico_id
+      WHERE v.tecnico_id=? AND v.estado='aceptada'
+      ORDER BY v.fecha ASC, v.id ASC
+    `, [tecnicoId]);
+
+    const [pagosRaw] = await req.tenantPool.query(`
+      SELECT * FROM movimientos_caja
+      WHERE tecnico_id=? AND categoria='Comisión POS'
+      ORDER BY COALESCE(fecha, DATE(created_at)) ASC, created_at ASC, id ASC
+    `, [tecnicoId]);
+
+    const pagos = pagosRaw.map(p => Object.assign({}, p, { monto: parseFloat(p.monto) || 0, ventas_cubiertas: [] }));
+    const ventas = ventasRaw.map(v => Object.assign({}, v, {
+      comision_monto: parseFloat(v.comision_monto) || 0,
+      liquidado: false,
+      pago_id: null
+    }));
+
+    let pagoIdx = 0;
+    let disponible = pagos.length ? pagos[0].monto : 0;
+    for (const venta of ventas) {
+      let restante = venta.comision_monto;
+      while (restante > 0.0001 && pagoIdx < pagos.length) {
+        if (disponible <= 0.0001) {
+          pagoIdx++;
+          disponible = pagoIdx < pagos.length ? pagos[pagoIdx].monto : 0;
+          continue;
+        }
+        const usar = Math.min(restante, disponible);
+        restante -= usar;
+        disponible -= usar;
+      }
+      if (restante <= 0.0001 && pagoIdx < pagos.length) {
+        venta.liquidado = true;
+        venta.pago_id = pagos[pagoIdx].id;
+        pagos[pagoIdx].ventas_cubiertas.push({ venta_id: venta.venta_id, folio: venta.folio, comision_monto: venta.comision_monto });
+      }
+    }
+
+    const totalGanado = ventas.reduce((s, v) => s + v.comision_monto, 0);
+    const totalPagado = pagos.reduce((s, p) => s + p.monto, 0);
+
+    res.json({
+      tecnico: tec,
+      ventas,
+      pagos,
+      totales: { ganado: totalGanado, pagado: totalPagado, saldo: totalGanado - totalPagado }
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Registrar un pago de comisión de ventas del POS a un técnico. Usa la categoría
+// "Comisión POS" (distinta de "Pago Técnico") para no mezclarse con sastrería.
+app.post('/api/tecnicos/:id/pagos-pos', tenantAuth, requireModulo('peluqueria'), async (req, res) => {
+  try {
+    const { monto, metodo_pago, fecha, observaciones } = req.body;
+    if (!monto || parseFloat(monto) <= 0) return res.status(400).json({ error: 'Monto inválido' });
+    const [[tec]] = await req.tenantPool.query('SELECT id FROM tecnicos WHERE id=?', [req.params.id]);
+    if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
+    const [result] = await req.tenantPool.query(
+      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, tecnico_id, fecha) VALUES ("egreso","Comisión POS",?,?,?,?,?)',
+      [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || '', req.params.id, fecha || null]
+    );
+    res.status(201).json({ ok: true, id: result.insertId });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1714,6 +1852,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         estado_pago ENUM('contado','credito') DEFAULT 'contado',
         credito_id INT NULL,
         orden_servicio_id INT NULL,
+        tecnico_id VARCHAR(50) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS venta_productos (
@@ -1740,6 +1879,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         mostrar_nombre_tirilla BOOLEAN DEFAULT TRUE,
         mostrar_direccion_tirilla BOOLEAN DEFAULT TRUE,
         mostrar_telefono_tirilla BOOLEAN DEFAULT TRUE,
+        pos_atendido_por BOOLEAN DEFAULT FALSE,
         pin VARCHAR(20) DEFAULT '3195122754',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       );

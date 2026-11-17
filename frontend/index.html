@@ -645,6 +645,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <button class="tab-btn" onclick="showModule('productos')" id="tab-productos"><i class="fa-solid fa-boxes-stacked"></i> Productos</button>
     <button class="tab-btn" onclick="showModule('ordenes')" id="tab-ordenes"><i class="fa-solid fa-shirt"></i> Órdenes</button>
     <button class="tab-btn" onclick="showModule('egresos')" id="tab-egresos"><i class="fa-solid fa-money-bill-transfer"></i> Egresos</button>
+    <button class="tab-btn" onclick="showModule('peluqueria')" id="tab-peluqueria"><i class="fa-solid fa-scissors"></i> Peluquería</button>
     <button class="tab-btn" onclick="showModule('config')" id="tab-config"><i class="fa-solid fa-gear"></i> Config</button>
   </nav>
   <button class="btn-salir" onclick="salir()"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
@@ -695,6 +696,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
             <button class="btn btn-primary btn-xs" onclick="abrirModalImportarCotizacion()" style="font-size:10px;padding:2px 5px;background:var(--electric)"><i class="fa-solid fa-download"></i> Cargar Cotización</button>
           </div>
           <div class="form-row" style="margin-top:0"><select id="pos-cliente"></select></div>
+          <div class="form-row" id="pos-atendido-por-row" style="display:none"><label>Atendido por</label><select id="pos-atendido-por"></select></div>
           <div class="form-row"><label>Obs.</label><input type="text" id="pos-obs" placeholder="Observaciones..."></div>
           <div class="form-row"><label>Paga con</label><input type="number" id="paga-con" placeholder="0.00" min="0" step="0.01" readonly style="background:var(--bg);color:var(--text-mid);cursor:not-allowed"></div>
           <div class="change-box"><span id="lbl-cambio">Cambio / Vueltas</span><strong id="cambio-val">$0.00</strong></div>
@@ -819,6 +821,9 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         </div>
         <div class="config-field"><label>Logo</label><input type="file" id="cfg-logo" accept="image/*" onchange="loadLogo(this)">
           <img id="logo-preview" src="" style="display:none;max-height:52px;margin-top:5px;border-radius:4px;border:1px solid var(--border)"></div>
+        <div class="config-field">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="cfg-pos-atendido-por" style="margin:0"> Habilitar selección de "Atendido por" en el POS (módulo Peluquería)</label>
+        </div>
         <button class="btn btn-primary" onclick="saveBusinessData()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
       </div>
     </div>
@@ -885,6 +890,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="productos"> Productos</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="ordenes"> Órdenes</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="egresos"> Egresos</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="peluqueria"> Peluquería</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="vend-mod-chk" value="config"> Config</label>
         </div>
         <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
@@ -1082,6 +1088,68 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <thead><tr><th></th><th>Técnico</th><th>Comisión Ganada</th><th>Pagado</th><th>Saldo</th><th>Acciones</th></tr></thead>
         <tbody id="tecnicos-resumen-body"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+</main>
+
+<!-- ═══ PELUQUERÍA (comisión de técnicos por venta del POS — independiente de Órdenes/Egresos) ═══ -->
+<main class="module" id="module-peluqueria">
+<h2 class="section-title"><i class="fa-solid fa-scissors"></i> Peluquería</h2>
+<div class="grid-layout">
+  <div class="card" style="grid-column:1/-1">
+    <div class="card-header"><i class="fa-solid fa-user-gear"></i> Técnicos / Comisión por venta</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:10px 0">
+      <button class="btn btn-secondary" onclick="abrirModalTecnicos()"><i class="fa-solid fa-user-gear"></i> Técnicos</button>
+      <div class="form-group" style="min-width:200px"><label>Técnico</label><select id="pel-tecnico" onchange="loadPeluqueriaDetalle()"></select></div>
+      <div class="form-group"><label>Desde</label><input type="date" id="pel-desde" onchange="loadPeluqueriaDetalle()"></div>
+      <div class="form-group"><label>Hasta</label><input type="date" id="pel-hasta" onchange="loadPeluqueriaDetalle()"></div>
+      <button class="btn btn-secondary btn-xs" onclick="clearPeluqueriaFiltro()"><i class="fa-solid fa-filter-circle-xmark"></i></button>
+    </div>
+
+    <div id="pel-sin-tecnico" style="display:none;color:var(--text-light);font-size:12.5px;padding:10px 0">
+      No hay técnicos registrados todavía. Usa el botón "Técnicos" para registrar el primero.
+    </div>
+
+    <div id="pel-contenido" style="display:none">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0">
+        <div class="card" style="padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:700">Cantidad de ventas</div>
+          <div id="pel-card-cantidad" style="font-size:22px;font-weight:800;color:var(--electric-dark)">0</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:700">Valor vendido</div>
+          <div id="pel-card-vendido" style="font-size:22px;font-weight:800;color:var(--electric-dark)">$0</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center">
+          <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;font-weight:700">Comisión ganada</div>
+          <div id="pel-card-comision" style="font-size:22px;font-weight:800;color:var(--electric-dark)">$0</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:var(--surface2);padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px">
+        <div style="font-size:12.5px">
+          Pagado: <strong id="pel-pagado-label">$0</strong> &nbsp;·&nbsp;
+          Saldo: <strong id="pel-saldo-label">$0</strong>
+        </div>
+        <button class="btn btn-primary btn-xs" onclick="abrirPagoTecnicoPOS()"><i class="fa-solid fa-hand-holding-dollar"></i> Liquidar comisión</button>
+      </div>
+
+      <div style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin-bottom:4px">Ventas</div>
+      <div class="tbl-wrap">
+        <table style="font-size:11.5px">
+          <thead><tr><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="pel-ventas-body"></tbody>
+        </table>
+      </div>
+
+      <div style="font-size:11.5px;font-weight:700;color:var(--electric-dark);text-transform:uppercase;margin:10px 0 4px">Pagos registrados</div>
+      <div class="tbl-wrap">
+        <table style="font-size:11.5px">
+          <thead><tr><th>Fecha</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr></thead>
+          <tbody id="pel-pagos-body"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -1526,6 +1594,21 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   </div>
 </div>
 
+<!-- ═══ LIQUIDAR COMISIÓN POS (Peluquería — independiente del pago a técnico de sastrería) ═══ -->
+<div class="modal-overlay" id="modal-tecnico-pago-pos">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><span><i class="fa-solid fa-hand-holding-dollar"></i> Liquidar comisión a <span id="tpp-nombre"></span></span><button class="modal-close" onclick="closeModal('modal-tecnico-pago-pos')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:8px">
+      <input type="hidden" id="tpp-tecnico-id">
+      <div class="form-group"><label>Monto</label><input type="number" id="tpp-monto" min="0" step="0.01"></div>
+      <div class="form-group"><label>Método</label><select id="tpp-metodo"></select></div>
+      <div class="form-group"><label>Fecha de pago</label><input type="date" id="tpp-fecha"></div>
+      <div class="form-group"><label>Observaciones</label><input type="text" id="tpp-obs" placeholder="Opcional"></div>
+      <button class="btn btn-primary" onclick="confirmarPagoTecnicoPOS()" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Registrar Pago</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 <div id="print-area" style="display:none"></div>
 
@@ -1610,12 +1693,20 @@ function checkModules() {
     if (elEgresos) elEgresos.style.display = 'none';
   }
 
+  // Peluquería: mismo criterio que Órdenes de Servicio — módulo nuevo y específico
+  // (comisión de técnicos por venta del POS), apagado por defecto. No afecta a Egresos
+  // ni a nada de sastrería: es un switch totalmente independiente.
+  if (mods['peluqueria'] !== true) {
+    var elPeluqueria = document.getElementById('tab-peluqueria');
+    if (elPeluqueria) elPeluqueria.style.display = 'none';
+  }
+
   // Restricción adicional del usuario VENDEDOR: además de lo que el plan del
   // negocio permite (arriba), si quien entró es el vendedor, solo ve las
   // pestañas que el dueño le haya habilitado explícitamente en Configuración.
   if (esVendedor()) {
     var permitidos = JSON.parse(localStorage.getItem('saas_vendedor_modulos') || '[]');
-    var tabsReales = ['pos','caja','cartera','productos','ordenes','egresos','config'];
+    var tabsReales = ['pos','caja','cartera','productos','ordenes','egresos','peluqueria','config'];
     tabsReales.forEach(function(mod) {
       if (permitidos.indexOf(mod) === -1) {
         var el = document.getElementById('tab-' + mod);
@@ -1683,7 +1774,7 @@ async function apiDelete(url){
 
 /* ═══ STATE ═══ */
 var productosCache=[];
-var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm',mostrar_nombre_tirilla:true,mostrar_direccion_tirilla:true,mostrar_telefono_tirilla:true};
+var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm',mostrar_nombre_tirilla:true,mostrar_direccion_tirilla:true,mostrar_telefono_tirilla:true,pos_atendido_por:false};
 // Tenants creados antes de este campo no lo traen de la BD (undefined/null) -> por defecto se sigue mostrando, igual que antes
 function tirillaFlag(v){ return (v===undefined||v===null) ? true : !!Number(v); }
 var configId=1;
@@ -1767,6 +1858,7 @@ function showModule(n){
     loadEgresosDia();
     loadTecnicosResumen();
   }
+  if(n==='peluqueria') loadPeluqueriaUI();
   if(n==='finanzas') {
      document.getElementById('fin-date-from').value = todayStr();
      document.getElementById('fin-date-to').value = todayStr();
@@ -2215,6 +2307,13 @@ async function processSale(){
 
       if(isCredito && planCotizadoId) {
          body.credito_plan_id = planCotizadoId;
+      }
+
+      // Atendido por (módulo Peluquería): solo se manda si el selector está visible y
+      // con un técnico elegido; si no, la venta queda sin técnico asociado, igual que hoy.
+      var atendidoPorSel = document.getElementById('pos-atendido-por');
+      if(atendidoPorSel && atendidoPorSel.closest('.form-row').style.display !== 'none' && atendidoPorSel.value){
+        body.tecnico_id = atendidoPorSel.value;
       }
 
       var venta=await apiPost('/ventas', body);
@@ -3351,6 +3450,7 @@ function loadConfigUI(){
   document.getElementById('cfg-nombre-tirilla').checked=tirillaFlag(cfg.mostrar_nombre_tirilla);
   document.getElementById('cfg-direccion-tirilla').checked=tirillaFlag(cfg.mostrar_direccion_tirilla);
   document.getElementById('cfg-telefono-tirilla').checked=tirillaFlag(cfg.mostrar_telefono_tirilla);
+  document.getElementById('cfg-pos-atendido-por').checked=!!Number(cfg.pos_atendido_por);
   document.getElementById('cfg-mensaje').value=cfg.mensaje_tirilla||cfg.mensajeTirilla||'';
   document.getElementById('cfg-stock-critico').value=cfg.stock_critico||10;
   document.getElementById('cfg-ticket-size').value=cfg.tamano_ticket||'80mm';
@@ -3481,10 +3581,12 @@ async function saveBusinessData(){
       tamano_ticket:configCache.tamano_ticket||'80mm',
       mostrar_nombre_tirilla:document.getElementById('cfg-nombre-tirilla').checked,
       mostrar_direccion_tirilla:document.getElementById('cfg-direccion-tirilla').checked,
-      mostrar_telefono_tirilla:document.getElementById('cfg-telefono-tirilla').checked
+      mostrar_telefono_tirilla:document.getElementById('cfg-telefono-tirilla').checked,
+      pos_atendido_por:document.getElementById('cfg-pos-atendido-por').checked
     });
     configCache=updated;
     if(updated.metodos_pago&&typeof updated.metodos_pago==='string')configCache.metodos_pago=JSON.parse(updated.metodos_pago);
+    refreshAtendidoPorSelect();
     toast('Datos guardados','success');
   }catch(e){toast('Error: '+e.message,'error')}
   hideLoading();
@@ -4622,6 +4724,23 @@ async function loadTecnicosDropdowns(){
     filtroSel.innerHTML = '<option value="">Todos los técnicos...</option>' + tecnicosCache.map(function(t){ return '<option value="'+t.id+'">'+t.nombre+'</option>'; }).join('');
     filtroSel.value = cur;
   }
+  refreshAtendidoPorSelect();
+}
+
+// Selector "Atendido por" del POS (módulo Peluquería). Solo se muestra si el negocio
+// activó el check en Configuración; si no, queda oculto y no afecta a nadie más.
+function refreshAtendidoPorSelect(){
+  var row = document.getElementById('pos-atendido-por-row');
+  var sel = document.getElementById('pos-atendido-por');
+  if(!row || !sel) return;
+  if(!configCache.pos_atendido_por || !Number(configCache.pos_atendido_por)){
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  var v = sel.value;
+  sel.innerHTML = opcionesTecnicosHTML();
+  sel.value = v;
 }
 
 function abrirModalTecnicos(){
@@ -4649,6 +4768,7 @@ async function loadTecnicosLista(){
     }).join('');
   }
   document.querySelectorAll('.pr-tecnico').forEach(function(sel){ var v=sel.value; sel.innerHTML=opcionesTecnicosHTML(); sel.value=v; });
+  refreshAtendidoPorSelect();
 }
 
 function editarTecnico(id){
@@ -5034,7 +5154,7 @@ async function loadEgresosDia(){
   if(desde && hasta){ params.push('fecha_inicio='+desde, 'fecha_fin='+hasta); }
   var rows;
   try { rows = await apiGet('/movimientos?'+params.join('&')); } catch(e) { toast('Error cargando egresos: '+e.message,'error'); return; }
-  rows = rows.filter(function(r){ return r.categoria !== 'Pago Técnico'; });
+  rows = rows.filter(function(r){ return r.categoria !== 'Pago Técnico' && r.categoria !== 'Comisión POS'; });
   var body = document.getElementById('egresos-dia-body');
   if(!rows.length){
     body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">Sin gastos registrados.</td></tr>';
@@ -5316,6 +5436,268 @@ async function confirmarPagoTecnico(){
       if(pagoNuevo) generarConstanciaPDF(det.tecnico, pagoNuevo);
     } catch(e) { /* no bloquea el flujo si falla la generación de la constancia */ }
   } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PELUQUERÍA: comisión de técnicos por venta del POS.
+   Totalmente separado de lo de arriba (Órdenes de Servicio / sastrería):
+   usa /tecnicos/resumen-pos, /tecnicos/:id/liquidacion-pos-detalle y
+   /tecnicos/:id/pagos-pos, que nunca tocan los números de sastrería.
+   ═══════════════════════════════════════════════════════════════ */
+var _pelDetalleCache = null; // detalle del técnico actualmente seleccionado en Peluquería
+
+async function loadPeluqueriaUI(){
+  if(!tecnicosCache.length){
+    try { tecnicosCache = await apiGet('/tecnicos'); } catch(e) { /* se maneja abajo mostrando "sin técnicos" */ }
+  }
+  var sel = document.getElementById('pel-tecnico');
+  var activos = tecnicosCache.filter(function(t){ return t.activo; });
+  if(!activos.length){
+    document.getElementById('pel-sin-tecnico').style.display = '';
+    sel.innerHTML = '';
+    document.getElementById('pel-contenido').style.display = 'none';
+    return;
+  }
+  document.getElementById('pel-sin-tecnico').style.display = 'none';
+  var cur = sel.value;
+  sel.innerHTML = activos.map(function(t){ return '<option value="'+t.id+'">'+t.nombre+'</option>'; }).join('');
+  sel.value = (cur && activos.some(function(t){ return String(t.id)===cur; })) ? cur : activos[0].id;
+  loadPeluqueriaDetalle();
+}
+
+function clearPeluqueriaFiltro(){
+  document.getElementById('pel-desde').value = '';
+  document.getElementById('pel-hasta').value = '';
+  loadPeluqueriaDetalle();
+}
+
+async function loadPeluqueriaDetalle(){
+  var tecId = document.getElementById('pel-tecnico').value;
+  var contenido = document.getElementById('pel-contenido');
+  if(!tecId){ contenido.style.display = 'none'; return; }
+  contenido.style.display = '';
+  var desde = document.getElementById('pel-desde').value;
+  var hasta = document.getElementById('pel-hasta').value;
+
+  var resumenRow, det;
+  try {
+    var params = [];
+    if(desde && hasta){ params.push('fecha_inicio='+desde, 'fecha_fin='+hasta); }
+    var resumen = await apiGet('/tecnicos/resumen-pos'+(params.length?'?'+params.join('&'):''));
+    resumenRow = resumen.find(function(t){ return String(t.id)===String(tecId); });
+    det = await apiGet('/tecnicos/'+tecId+'/liquidacion-pos-detalle');
+  } catch(e) { toast('Error cargando comisiones: '+e.message,'error'); return; }
+
+  _pelDetalleCache = det;
+
+  document.getElementById('pel-card-cantidad').textContent = resumenRow ? resumenRow.cantidad_ventas : 0;
+  document.getElementById('pel-card-vendido').textContent = fmt(resumenRow ? resumenRow.valor_vendido : 0);
+  document.getElementById('pel-card-comision').textContent = fmt(resumenRow ? resumenRow.comision_ganada : 0);
+  document.getElementById('pel-pagado-label').textContent = fmt(resumenRow ? resumenRow.pagado : 0);
+  var saldo = resumenRow ? resumenRow.saldo : 0;
+  document.getElementById('pel-saldo-label').textContent = fmt(saldo) + (saldo>0.5?' (se le debe)':(saldo<-0.5?' (a favor del negocio)':''));
+
+  renderPeluqueriaVentasYPagos(det, desde, hasta);
+}
+
+// El estado liquidada/pendiente de cada venta se calcula SIEMPRE sobre el historial
+// completo (igual que en sastrería): si se filtrara por fecha, una venta ya pagada
+// podría verse "pendiente" solo por quedar fuera del rango. El rango de fechas aquí
+// solo decide qué filas se muestran, no si están liquidadas o no.
+function renderPeluqueriaVentasYPagos(det, desde, hasta){
+  var ventasFiltradas = det.ventas.filter(function(v){
+    if(desde && hasta) return v.fecha >= desde && v.fecha <= hasta;
+    return true;
+  });
+  var ventasBody = document.getElementById('pel-ventas-body');
+  ventasBody.innerHTML = ventasFiltradas.length ? ventasFiltradas.map(function(v){
+    var estado = v.liquidado
+      ? '<span style="color:#1a8a4a;font-weight:700"><i class="fa-solid fa-circle-check"></i> Liquidada</span>'
+      : '<span style="color:var(--text-light)">Pendiente</span>';
+    var accion = v.liquidado
+      ? '<button class="btn btn-secondary btn-xs" onclick="imprimirConstanciaPOS(\''+det.tecnico.id+'\','+v.pago_id+')"><i class="fa-solid fa-file-pdf"></i> Constancia</button>'
+      : '—';
+    return '<tr>'
+      + '<td>'+(v.folio||('#'+v.venta_id))+'</td>'
+      + '<td>'+(v.cliente||'—')+'</td>'
+      + '<td>'+fmtDate(v.fecha)+'</td>'
+      + '<td>'+fmt(v.total)+'</td>'
+      + '<td>'+fmt(v.comision_monto)+'</td>'
+      + '<td>'+estado+'</td>'
+      + '<td>'+accion+'</td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:8px">Sin ventas en este rango.</td></tr>';
+
+  var pagosFiltrados = det.pagos.filter(function(p){
+    var f = p.fecha || (p.created_at ? String(p.created_at).slice(0,10) : '');
+    if(desde && hasta) return f >= desde && f <= hasta;
+    return true;
+  });
+  var pagosBody = document.getElementById('pel-pagos-body');
+  pagosBody.innerHTML = pagosFiltrados.length ? pagosFiltrados.map(function(p){
+    var f = p.fecha || (p.created_at ? String(p.created_at).slice(0,10) : '');
+    return '<tr>'
+      + '<td>'+fmtDate(f)+'</td>'
+      + '<td>'+fmt(p.monto)+'</td>'
+      + '<td>'+(p.metodo_pago||'—')+'</td>'
+      + '<td>'+(p.observaciones||'—')+'</td>'
+      + '<td><button class="btn btn-secondary btn-xs" onclick="imprimirConstanciaPOS(\''+det.tecnico.id+'\','+p.id+')"><i class="fa-solid fa-file-pdf"></i> Constancia</button></td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-light);padding:8px">Sin pagos en este rango.</td></tr>';
+}
+
+function abrirPagoTecnicoPOS(){
+  var tecId = document.getElementById('pel-tecnico').value;
+  if(!tecId){ toast('Elige un técnico','error'); return; }
+  var nombre = _pelDetalleCache ? _pelDetalleCache.tecnico.nombre : '';
+  document.getElementById('tpp-tecnico-id').value = tecId;
+  document.getElementById('tpp-nombre').textContent = nombre;
+  document.getElementById('tpp-monto').value = '';
+  populateMetodoSelect('tpp-metodo');
+  document.getElementById('tpp-fecha').value = todayStr();
+  document.getElementById('tpp-obs').value = '';
+  openModal('modal-tecnico-pago-pos');
+}
+
+async function confirmarPagoTecnicoPOS(){
+  var id = document.getElementById('tpp-tecnico-id').value;
+  var monto = parseFloat(document.getElementById('tpp-monto').value);
+  if(!monto || monto<=0){ toast('Indica un monto válido','error'); return; }
+  var payload = {
+    monto: monto,
+    metodo_pago: document.getElementById('tpp-metodo').value,
+    fecha: document.getElementById('tpp-fecha').value || todayStr(),
+    observaciones: document.getElementById('tpp-obs').value.trim()
+  };
+  try {
+    await apiPost('/tecnicos/'+id+'/pagos-pos', payload);
+    toast('Pago registrado','success');
+    closeModal('modal-tecnico-pago-pos');
+    await loadPeluqueriaDetalle();
+    // Descarga de inmediato la constancia de este pago recién registrado.
+    try {
+      var det = await apiGet('/tecnicos/'+id+'/liquidacion-pos-detalle');
+      _pelDetalleCache = det;
+      var pagoNuevo = det.pagos.reduce(function(best,p){ return (!best || p.id>best.id) ? p : best; }, null);
+      if(pagoNuevo) generarConstanciaPOSPDF(det.tecnico, pagoNuevo);
+    } catch(e) { /* no bloquea el flujo si falla la constancia */ }
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+function imprimirConstanciaPOS(tecnicoId, pagoId){
+  var det = _pelDetalleCache;
+  if(!det || String(det.tecnico.id)!==String(tecnicoId)){ toast('Vuelve a abrir el detalle del técnico','error'); return; }
+  var pago = det.pagos.find(function(p){ return String(p.id)===String(pagoId); });
+  if(!pago){ toast('No se encontró ese pago','error'); return; }
+  generarConstanciaPOSPDF(det.tecnico, pago);
+}
+
+function generarConstanciaPOSPDF(tecnico, pago){
+  var jsPDF=window.jspdf?window.jspdf.jsPDF:(window.jsPDF||null);
+  if(!jsPDF){toast('Error: jsPDF no cargó. Revisa tu conexión.','error');return;}
+  var cfg=configCache;
+  var nombreNeg=cfg.nombre_negocio||cfg.nombreNegocio||'ControlMovil';
+  var doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+  var pageWidth=210, margin=18, y=margin;
+
+  if(cfg.logo){
+    try{ doc.addImage(cfg.logo,'PNG',margin,y,30,18,undefined,'FAST'); }catch(e){}
+  }
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.setTextColor(33,28,184);
+  doc.text(String(nombreNeg).toUpperCase(), pageWidth-margin, y+8, {align:'right'});
+  var sub=[cfg.direccion,cfg.telefono].filter(Boolean).join(' · ');
+  if(sub){
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(sub, pageWidth-margin, y+14, {align:'right'});
+  }
+  doc.setTextColor(0);
+
+  y += 26;
+  doc.setDrawColor(200,200,200);
+  doc.setLineWidth(0.4);
+  doc.line(margin,y,pageWidth-margin,y);
+  y += 10;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14);
+  doc.text('CONSTANCIA DE LIQUIDACIÓN DE COMISIÓN', pageWidth/2, y, {align:'center'});
+  y += 10;
+
+  doc.setFontSize(10);
+  var fechaPago = pago.fecha || (pago.created_at ? String(pago.created_at).slice(0,10) : '');
+  var filas=[
+    ['Técnico', tecnico.nombre],
+    ['Fecha de pago', fmtDate(fechaPago)],
+    ['Monto pagado', fmt(pago.monto)],
+    ['Método de pago', pago.metodo_pago||'—']
+  ];
+  filas.forEach(function(f){
+    doc.setFont('helvetica','bold'); doc.text(f[0]+':', margin, y);
+    doc.setFont('helvetica','normal'); doc.text(String(f[1]), margin+45, y);
+    y+=6;
+  });
+  if(pago.observaciones){
+    doc.setFont('helvetica','bold'); doc.text('Observaciones:', margin, y);
+    doc.setFont('helvetica','normal');
+    var obsLines=doc.splitTextToSize(pago.observaciones, pageWidth-margin*2-45);
+    doc.text(obsLines, margin+45, y);
+    y += 6*obsLines.length;
+  }
+
+  y += 6;
+  doc.setDrawColor(230,230,230);
+  doc.line(margin,y,pageWidth-margin,y);
+  y += 8;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text('Ventas cubiertas por este pago', margin, y);
+  y += 7;
+
+  var cubiertas = pago.ventas_cubiertas || [];
+  if(!cubiertas.length){
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text('Este pago no cubre ventas específicas (abono anticipado o saldo general).', margin, y);
+    doc.setTextColor(0);
+  } else {
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica','bold');
+    doc.text('Venta', margin, y);
+    doc.text('Comisión', pageWidth-margin, y, {align:'right'});
+    y += 5;
+    doc.setDrawColor(230,230,230);
+    doc.line(margin,y-3.5,pageWidth-margin,y-3.5);
+    doc.setFont('helvetica','normal');
+    var totalCub=0;
+    cubiertas.forEach(function(v){
+      doc.text(String(v.folio||('#'+v.venta_id)), margin, y);
+      doc.text(fmt(v.comision_monto), pageWidth-margin, y, {align:'right'});
+      totalCub += parseFloat(v.comision_monto)||0;
+      y += 5.5;
+      if(y > 270){ doc.addPage(); y = margin; }
+    });
+    y += 2;
+    doc.setDrawColor(200,200,200);
+    doc.line(margin,y,pageWidth-margin,y);
+    y += 6;
+    doc.setFont('helvetica','bold');
+    doc.text('Total', margin, y);
+    doc.text(fmt(totalCub), pageWidth-margin, y, {align:'right'});
+  }
+
+  y += 20;
+  doc.setDrawColor(0);
+  doc.line(margin, y, margin+70, y);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  doc.text('Firma del técnico', margin, y+5);
+
+  doc.save('ConstanciaPOS_'+String(tecnico.nombre).replace(/[^a-z0-9]+/gi,'_')+'_'+String(fechaPago||'').replace(/-/g,'')+'.pdf');
 }
 </script>
 
