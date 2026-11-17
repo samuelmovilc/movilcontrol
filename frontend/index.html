@@ -1110,8 +1110,6 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <option value="liquidada">Liquidadas</option>
         </select>
       </div>
-      <div class="form-group"><label>Desde</label><input type="date" id="pel-desde" onchange="loadPeluqueriaDetalle()"></div>
-      <div class="form-group"><label>Hasta</label><input type="date" id="pel-hasta" onchange="loadPeluqueriaDetalle()"></div>
       <button class="btn btn-secondary btn-xs" onclick="setPelRango('7d')">Últimos 7 días</button>
       <div class="form-group" style="min-width:120px"><label>Mes</label>
         <select id="pel-mes" onchange="aplicarPelMesAnio()">
@@ -1141,6 +1139,8 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
           <option value="2030">2030</option>
         </select>
       </div>
+      <div class="form-group"><label>Desde</label><input type="date" id="pel-desde" onchange="loadPeluqueriaDetalle()"></div>
+      <div class="form-group"><label>Hasta</label><input type="date" id="pel-hasta" onchange="loadPeluqueriaDetalle()"></div>
       <button class="btn btn-secondary btn-xs" onclick="clearPeluqueriaFiltro()" title="Quitar filtros"><i class="fa-solid fa-filter-circle-xmark"></i></button>
     </div>
 
