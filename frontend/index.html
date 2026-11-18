@@ -1305,7 +1305,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         </div>
         <div class="form-group"><label>Precio venta *</label><input type="number" id="prod-precio-venta" step="0.01" min="0"></div>
         <div class="form-group"><label>Precio compra *</label><input type="number" id="prod-precio-compra" step="0.01" min="0"></div>
-        <div class="form-group"><label>Stock *</label><input type="number" id="prod-stock" min="0"></div>
+        <div class="form-group"><label>Stock *</label><input type="number" id="prod-stock" min="0" step="0.01"></div>
         <div class="form-group"><label>Fecha carga</label><input type="date" id="prod-fecha"></div>
         <div class="form-group"><label>Imagen (Opc. JPG/PNG)</label><input type="file" id="prod-imagen" accept="image/png, image/jpeg" onchange="previewProdImage(this)">
           <img id="prod-imagen-preview" src="" style="display:none;max-height:40px;margin-top:5px;border-radius:4px;border:1px solid var(--border)">
@@ -1323,7 +1323,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <div class="modal-header"><span><i class="fa-solid fa-cubes"></i> Editar Stock</span><button class="modal-close" onclick="closeModal('modal-stock')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body">
       <p id="modal-stock-nombre" style="font-weight:700;margin-bottom:10px;color:var(--electric)"></p>
-      <div class="form-group"><label>Nuevo stock</label><input type="number" id="modal-stock-val" min="0" style="font-size:17px;font-weight:700;text-align:center"></div>
+      <div class="form-group"><label>Nuevo stock</label><input type="number" id="modal-stock-val" min="0" step="0.01" style="font-size:17px;font-weight:700;text-align:center"></div>
       <p style="margin-top:7px;font-size:11.5px;color:var(--text-light)">Si el nuevo stock supera al actual, la diferencia se registra como entrada.</p>
     </div>
     <div class="modal-footer">
@@ -1899,6 +1899,7 @@ function confirmDlg(title,msg,cb){
   openModal('modal-confirm');
 }
 var fmt=function(n){return'$'+(+n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})};
+var fmtCant=function(n){n=+n||0;return (n%1===0)?String(n):n.toLocaleString('es-MX',{minimumFractionDigits:1,maximumFractionDigits:2})};
 var localDateStr=function(d){d=d||new Date();var tz=d.getTimezoneOffset()*60000;return new Date(d.getTime()-tz).toISOString().slice(0,10)};
 var fmtDate=function(iso){if(!iso)return'';if(iso.includes('/'))return iso;var d=new Date(iso.includes('T')?iso:(iso.includes(' ')?iso.replace(' ','T'):iso+'T12:00:00Z'));if(isNaN(d))return iso;return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 var todayStr=function(){return localDateStr()};
@@ -1946,7 +1947,7 @@ function renderPosProducts(filter){
       +'<td data-label="Código" style="font-size:10.5px;color:var(--text-light)">'+p.id+'</td>'
       +'<td data-label="Nombre" style="font-weight:600">'+p.nombre+'</td>'
       +'<td data-label="Precio" style="color:var(--electric);font-weight:700">'+fmt(p.precio_venta)+'</td>'
-      +'<td data-label="Stock"><span class="badge-stock '+sc+'">'+p.stock+'</span></td></tr>';
+      +'<td data-label="Stock"><span class="badge-stock '+sc+'">'+fmtCant(p.stock)+'</span></td></tr>';
   }).join('');
 }
 function filterPosProducts(){renderPosProducts(document.getElementById('pos-search').value)}
@@ -2042,7 +2043,7 @@ function renderCart(){
     var tr = document.createElement('tr');
     tr.innerHTML = 
       '<td style="font-weight:600;color:var(--text);font-size:12px;white-space:normal;line-height:1.2">'+item.nombre+'</td>'+
-      '<td><input type="number" class="cart-input qty" value="'+item.cantidad+'" min="1" onchange="updateCartItem('+idx+', \'cantidad\', this.value)"></td>'+
+      '<td><input type="number" class="cart-input qty" value="'+item.cantidad+'" min="0.01" step="0.01" onchange="updateCartItem('+idx+', \'cantidad\', this.value)"></td>'+
       '<td><input type="number" class="cart-input" value="'+item.precioUnitario.toFixed(2)+'" min="0" step="0.01" onchange="updateCartItem('+idx+', \'precio\', this.value)" style="width:58px"></td>'+
       '<td style="font-weight:700;color:var(--electric)">'+fmt(item.subtotal)+'</td>'+
       '<td style="text-align:right"><button class="cart-del" onclick="removeFromCart('+idx+')"><i class="fa-solid fa-trash-can"></i></button></td>';
@@ -2087,8 +2088,11 @@ function updateCartItem(i,field,val){
   val=parseFloat(val)||0;
   if(field==='cantidad'){
     var p=productosCache.find(function(x){return x.id===cart[i].codigo});
-    if(p && val > p.stock){toast('Stock insuficiente. Max: '+p.stock,'error');val=p.stock;}
-    if(val<1)val=1;
+    if(p){
+      var stockDisp=parseFloat(p.stock)||0;
+      if(val > stockDisp){toast('Stock insuficiente. Max: '+fmtCant(stockDisp),'error');val=stockDisp;}
+    }
+    if(val<=0)val=1;
     cart[i].cantidad=val;
   }
   if(field==='precio')cart[i].precioUnitario=val;
@@ -2515,14 +2519,14 @@ function printTicket(venta){
   // Productos
   prods.forEach(function(p){
     var np=p.nombre||'';
-    var cant=parseInt(p.cantidad||0);
+    var cant=parseFloat(p.cantidad||0);
     var pu=parseFloat(p.precioUnitario||p.precio_unitario||0);
     var sub=parseFloat(p.subtotal||0);
     // Nombre puede ser largo — wrap manual
     doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0);
     var lines=doc.splitTextToSize(np,cw);
     lines.forEach(function(l){addLine(l,8,false,false)});
-    addRow(cant+' x '+fmt(pu),fmt(sub),8,false,true);
+    addRow(fmtCant(cant)+' x '+fmt(pu),fmt(sub),8,false,true);
     y+=0.5;
   });
 
@@ -2608,13 +2612,13 @@ function printTicket(venta){
   y+=1;as2();
 
   prods.forEach(function(p){
-    var np=p.nombre||'';var cant=parseInt(p.cantidad||0);
+    var np=p.nombre||'';var cant=parseFloat(p.cantidad||0);
     var pu=parseFloat(p.precioUnitario||p.precio_unitario||0);
     var sub=parseFloat(p.subtotal||0);
     doc2.setFontSize(8);doc2.setFont('helvetica','bold');doc2.setTextColor(0);
     var lines=doc2.splitTextToSize(np,cw);
     lines.forEach(function(l){al(l,8,false,false)});
-    ar(cant+' x '+fmt(pu),fmt(sub),8,false,true);y+=0.5;
+    ar(fmtCant(cant)+' x '+fmt(pu),fmt(sub),8,false,true);y+=0.5;
   });
 
   as2Strong();ar('TOTAL',fmt(venta.total),11,true);as2Strong();
@@ -2750,7 +2754,7 @@ async function verDetalleVenta(folio){
       +'<th style="background:var(--electric-pale);color:var(--electric-dark);padding:5px 9px;text-align:right;font-size:11px;border-bottom:2px solid var(--border-strong)">P.Unit.</th>'
       +'<th style="background:var(--electric-pale);color:var(--electric-dark);padding:5px 9px;text-align:right;font-size:11px;border-bottom:2px solid var(--border-strong)">Subtotal</th>'
       +'</tr></thead><tbody>'
-      +prods.map(function(p){return'<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 9px">'+p.nombre+'</td><td style="padding:5px 9px;text-align:right">'+p.cantidad+'</td><td style="padding:5px 9px;text-align:right">'+fmt(p.precio_unitario)+'</td><td style="padding:5px 9px;text-align:right;font-weight:700;color:var(--electric)">'+fmt(p.subtotal)+'</td></tr>'}).join('')
+      +prods.map(function(p){return'<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 9px">'+p.nombre+'</td><td style="padding:5px 9px;text-align:right">'+fmtCant(p.cantidad)+'</td><td style="padding:5px 9px;text-align:right">'+fmt(p.precio_unitario)+'</td><td style="padding:5px 9px;text-align:right;font-weight:700;color:var(--electric)">'+fmt(p.subtotal)+'</td></tr>'}).join('')
       +'</tbody></table>';
     openModal('modal-venta');
   }catch(e){toast('Error cargando detalle','error')}
@@ -3049,9 +3053,9 @@ function renderProductsTable(){
       +'<td data-label="Categoría" style="color:var(--text-mid)">'+(p.categoria||'—')+'</td>'
       +'<td data-label="P.Venta" style="color:var(--electric);font-weight:700">'+fmt(pv)+'</td>'
       +'<td data-label="P.Compra" style="color:var(--text-mid)">'+fmt(pc)+'</td>'
-      +'<td data-label="Stock"><span class="badge-stock '+sc+'">'+p.stock+'</span></td>'
-      +'<td data-label="Entradas" style="color:var(--green-dark);font-weight:600">'+p.entradas+'</td>'
-      +'<td data-label="Salidas" style="color:var(--red);font-weight:600">'+p.salidas+'</td>'
+      +'<td data-label="Stock"><span class="badge-stock '+sc+'">'+fmtCant(p.stock)+'</span></td>'
+      +'<td data-label="Entradas" style="color:var(--green-dark);font-weight:600">'+fmtCant(p.entradas)+'</td>'
+      +'<td data-label="Salidas" style="color:var(--red);font-weight:600">'+fmtCant(p.salidas)+'</td>'
       +'<td data-label="F.Carga" style="font-size:10.5px;color:var(--text-light);white-space:nowrap">'+fmtDate(p.fecha_carga)+'</td>'
       +'<td data-label="Acciones" style="white-space:nowrap">'
       +'<button class="btn btn-secondary btn-xs" onclick="openProductModal(\''+p.id+'\')"><i class="fa-solid fa-pen"></i></button> '
@@ -3073,11 +3077,11 @@ function renderStats(){
   var val=prods.reduce(function(s,p){return s+p.stock*parseFloat(p.precio_compra)},0);
   document.getElementById('stats-grid').innerHTML=
     '<div class="stat-card"><div class="stat-card-title"><i class="fa-solid fa-fire" style="color:var(--red)"></i> Top 5 Más Vendidos</div>'
-    +'<ul class="stat-list">'+( t5s.length?t5s.map(function(p){return'<li><span>'+p.nombre+'</span><span style="color:var(--electric);font-weight:700">'+p.salidas+' uds · '+fmt(p.salidas*parseFloat(p.precio_venta))+'</span></li>'}).join(''):'<li><span>Sin ventas aún</span></li>')+'</ul></div>'
+    +'<ul class="stat-list">'+( t5s.length?t5s.map(function(p){return'<li><span>'+p.nombre+'</span><span style="color:var(--electric);font-weight:700">'+fmtCant(p.salidas)+' uds · '+fmt(p.salidas*parseFloat(p.precio_venta))+'</span></li>'}).join(''):'<li><span>Sin ventas aún</span></li>')+'</ul></div>'
     +'<div class="stat-card"><div class="stat-card-title"><i class="fa-solid fa-warehouse" style="color:var(--green)"></i> Top 5 Mayor Stock</div>'
-    +'<ul class="stat-list">'+( t5k.length?t5k.map(function(p){return'<li><span>'+p.nombre+'</span><span style="color:var(--green-dark);font-weight:700">'+p.stock+' uds</span></li>'}).join(''):'<li><span>Sin datos</span></li>')+'</ul></div>'
+    +'<ul class="stat-list">'+( t5k.length?t5k.map(function(p){return'<li><span>'+p.nombre+'</span><span style="color:var(--green-dark);font-weight:700">'+fmtCant(p.stock)+' uds</span></li>'}).join(''):'<li><span>Sin datos</span></li>')+'</ul></div>'
     +'<div class="stat-card"><div class="stat-card-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--yellow)"></i> Stock Crítico (&lt;'+(cfg.stock_critico||10)+')</div>'
-    +'<ul class="stat-list">'+( low.length?low.map(function(p){return'<li><span style="color:var(--red)">'+p.nombre+'</span><span class="badge-stock '+(p.stock<=0?'out':'low')+'">'+p.stock+'</span></li>'}).join(''):'<li style="border-left:3px solid var(--green)"><span style="color:var(--green)">¡Todo en orden!</span></li>')+'</ul></div>'
+    +'<ul class="stat-list">'+( low.length?low.map(function(p){return'<li><span style="color:var(--red)">'+p.nombre+'</span><span class="badge-stock '+(p.stock<=0?'out':'low')+'">'+fmtCant(p.stock)+'</span></li>'}).join(''):'<li style="border-left:3px solid var(--green)"><span style="color:var(--green)">¡Todo en orden!</span></li>')+'</ul></div>'
     +'<div class="stat-card" style="text-align:center"><div class="stat-card-title" style="justify-content:center"><i class="fa-solid fa-boxes-stacked"></i> Inventario</div>'
     +'<div class="stat-big">'+prods.length+'</div><div class="stat-sub">productos</div>'
     +'<div style="margin-top:10px"><div class="stat-big" style="font-size:18px">'+fmt(val)+'</div><div class="stat-sub">valor total (costo)</div></div></div>';
@@ -3117,7 +3121,7 @@ async function saveProduct(){
   var categoria=document.getElementById('prod-categoria').value.trim()||null;
   var pv=parseFloat(document.getElementById('prod-precio-venta').value)||0;
   var pc=parseFloat(document.getElementById('prod-precio-compra').value)||0;
-  var stock=parseInt(document.getElementById('prod-stock').value)||0;
+  var stock=parseFloat(document.getElementById('prod-stock').value)||0;
   var img = currentProdImagen;
   if(!codigo||!nombre||pv<=0||stock<0){toast('Completa los campos obligatorios','error');return}
   showLoading('Guardando...');
@@ -3153,7 +3157,7 @@ function openStockModal(id){
   openModal('modal-stock');
 }
 async function saveStock(){
-  var ns=parseInt(document.getElementById('modal-stock-val').value)||0;
+  var ns=parseFloat(document.getElementById('modal-stock-val').value)||0;
   showLoading('Actualizando stock...');
   try{
     await apiPatch('/productos/'+stockEditId+'/stock',{stock:ns});
@@ -3195,7 +3199,7 @@ function _filasAProductos(filas){
     var codigo=String(cols[0]!=null?cols[0]:'').trim();
     var nombre=String(cols[1]!=null?cols[1]:'').trim();
     if(codigo&&nombre)
-      productos.push({id:codigo,nombre:nombre,precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseInt(cols[4])||0,categoria:(cols[5]!=null&&String(cols[5]).trim())?String(cols[5]).trim():null});
+      productos.push({id:codigo,nombre:nombre,precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseFloat(cols[4])||0,categoria:(cols[5]!=null&&String(cols[5]).trim())?String(cols[5]).trim():null});
   });
   return productos;
 }
@@ -3236,7 +3240,7 @@ async function importExcel(input){
     lines.slice(1).forEach(function(line){
       var cols=line.split(',').map(function(c){return c.replace(/^"|"$/g,'').trim()});
       if(cols.length>=5&&cols[0]&&cols[1])
-        productos.push({id:cols[0],nombre:cols[1],precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseInt(cols[4])||0,categoria:(cols[5]&&cols[5].trim())?cols[5].trim():null});
+        productos.push({id:cols[0],nombre:cols[1],precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseFloat(cols[4])||0,categoria:(cols[5]&&cols[5].trim())?cols[5].trim():null});
     });
     if(!productos.length){toast('Sin datos válidos','error');input.value='';return}
     showLoading('Importando '+productos.length+' productos...');
@@ -4103,7 +4107,7 @@ function renderCotizadorProductos() {
     html += '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">';
     html += '<input type="number" value="'+p.precio+'" min="0" step="any" title="Precio solo para esta cotización (no cambia el catálogo)" style="width:80px;padding:4px;font-size:12px;border:1px solid var(--border);border-radius:3px;text-align:right" onchange="updateCotizadorProdPrecio('+idx+', this.value)">';
     html += '<span style="color:var(--text-light)">x</span>';
-    html += '<input type="number" value="'+p.cantidad+'" min="1" max="'+p.stock+'" style="width:50px;padding:4px;font-size:12px;border:1px solid var(--border);border-radius:3px;text-align:center" onchange="updateCotizadorProdQty('+idx+', this.value, '+p.stock+')">';
+    html += '<input type="number" value="'+p.cantidad+'" min="0.01" step="0.01" max="'+p.stock+'" style="width:50px;padding:4px;font-size:12px;border:1px solid var(--border);border-radius:3px;text-align:center" onchange="updateCotizadorProdQty('+idx+', this.value, '+p.stock+')">';
     html += '</div>';
     html += '<div style="font-weight:bold;margin-left:auto;white-space:nowrap">'+fmt(subtotal)+'</div>';
     html += '<button class="btn btn-secondary btn-xs" style="color:var(--red);padding:4px 7px;flex-shrink:0" onclick="removeCotizadorProd('+idx+')"><i class="fa-solid fa-trash"></i></button>';
@@ -4120,9 +4124,9 @@ function removeCotizadorProd(idx) {
 }
 
 function updateCotizadorProdQty(idx, val, maxStock) {
-  var qty = parseInt(val) || 1;
-  if(qty > maxStock) { qty = maxStock; toast('Stock máximo: '+maxStock, 'error'); }
-  if(qty < 1) qty = 1;
+  var qty = parseFloat(val) || 1;
+  if(qty > maxStock) { qty = maxStock; toast('Stock máximo: '+fmtCant(maxStock), 'error'); }
+  if(qty <= 0) qty = 1;
   cotizadorProductos[idx].cantidad = qty;
   renderCotizadorProductos();
 }

@@ -183,7 +183,7 @@ app.get('/api/productos', tenantAuth, requireModulo('pos','productos'), async (r
     if (nombre)     { sql += ' AND nombre LIKE ?';        params.push('%'+nombre+'%'); }
     if (codigo)     { sql += ' AND id LIKE ?';            params.push('%'+codigo+'%'); }
     if (categoria)  { sql += ' AND categoria = ?';        params.push(categoria); }
-    if (stock_max)  { sql += ' AND stock <= ?';           params.push(parseInt(stock_max)); }
+    if (stock_max)  { sql += ' AND stock <= ?';           params.push(parseFloat(stock_max)); }
     if (precio_min) { sql += ' AND precio_venta >= ?';    params.push(parseFloat(precio_min)); }
     if (precio_max) { sql += ' AND precio_venta <= ?';    params.push(parseFloat(precio_max)); }
     if (orden === 'salidas')     sql += ' ORDER BY salidas DESC';
@@ -421,7 +421,7 @@ app.get('/api/ventas/resumen/:fecha', tenantAuth, requireModulo('pos','caja'), a
       prods.forEach(p => { costoMap[p.id] = parseFloat(p.precio_compra); });
     }
     let utilidad = 0;
-    ventas.forEach(v => { utilidad += (parseFloat(v.precio_unitario||0) - (costoMap[v.producto_id]||0)) * parseInt(v.cantidad||0); });
+    ventas.forEach(v => { utilidad += (parseFloat(v.precio_unitario||0) - (costoMap[v.producto_id]||0)) * parseFloat(v.cantidad||0); });
     res.json({ totalVendido, utilidad, pct: totalVendido>0?(utilidad/totalVendido*100):0, byMethod, cantVentas: seen.size });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -736,7 +736,7 @@ app.get('/api/creditos', tenantAuth, requireModulo('cartera'), async (req, res) 
       // ser utilidad real).
       cred.costo_total = cred.orden_servicio_id
         ? (costoOrdenMap[cred.orden_servicio_id] || 0)
-        : cred.productos.reduce((sum, p) => sum + (costoMap[String(p.id)] || 0) * (parseInt(p.cantidad) || 0), 0);
+        : cred.productos.reduce((sum, p) => sum + (costoMap[String(p.id)] || 0) * (parseFloat(p.cantidad) || 0), 0);
       cred.ganancia_esperada = parseFloat(cred.total_credito) - cred.costo_total;
       cred.ganancia_realizada = Math.max(0, Math.min(cred.total_pagado, parseFloat(cred.total_credito)) - cred.costo_total);
     }
@@ -1900,9 +1900,9 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         precio_venta DECIMAL(10,2) NOT NULL,
         precio_min DECIMAL(10,2),
         precio_compra DECIMAL(10,2),
-        stock INT DEFAULT 0,
-        entradas INT DEFAULT 0,
-        salidas INT DEFAULT 0,
+        stock DECIMAL(10,2) DEFAULT 0,
+        entradas DECIMAL(10,2) DEFAULT 0,
+        salidas DECIMAL(10,2) DEFAULT 0,
         imagen LONGTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -1937,7 +1937,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         venta_id INT NOT NULL,
         producto_id VARCHAR(50) NOT NULL,
         nombre VARCHAR(150) NOT NULL,
-        cantidad INT NOT NULL,
+        cantidad DECIMAL(10,2) NOT NULL,
         precio_unitario DECIMAL(10,2) NOT NULL,
         subtotal DECIMAL(10,2) NOT NULL,
         FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE
