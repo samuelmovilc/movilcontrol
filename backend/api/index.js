@@ -1753,6 +1753,15 @@ app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), asyn
 // CAJA — APERTURA / CIERRE DE SESIÓN
 // ════════════════════════════════
 
+// Colombia no tiene horario de verano (siempre UTC-5), así que un offset fijo basta
+// para calcular la fecha/hora "de Bogotá" sin depender de en qué zona horaria esté
+// corriendo el proceso de Node (en Vercel normalmente es UTC) — usar new Date()
+// directo ahí da la fecha/hora equivocada para quien abre o cierra la caja.
+function fechaHoraBogota() {
+  const d = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  return { fecha: d.toISOString().slice(0, 10), hora: d.toISOString().slice(11, 19) };
+}
+
 // Sesión abierta en este momento (o null) + totales en vivo. El frontend llama esto
 // al entrar al módulo Caja, al abrir el POS, y antes de vender/anular, para saber si
 // hay que bloquear la acción o mostrar el dashboard.
@@ -1785,9 +1794,7 @@ app.post('/api/caja/abrir', tenantAuth, requireModulo('caja'), async (req, res) 
     if (saldo_apertura == null || parseFloat(saldo_apertura) < 0) return res.status(400).json({ error: 'Indica el saldo de apertura' });
     const [abiertas] = await req.tenantPool.query("SELECT id FROM caja_sesiones WHERE estado='abierta' LIMIT 1");
     if (abiertas.length) return res.status(409).json({ error: 'Ya hay una caja abierta' });
-    const now = new Date();
-    const fecha = now.toISOString().slice(0,10);
-    const hora = now.toTimeString().slice(0,8);
+    const { fecha, hora } = fechaHoraBogota();
     const [result] = await req.tenantPool.query(
       "INSERT INTO caja_sesiones (fecha_apertura, hora_apertura, saldo_apertura, estado, observaciones) VALUES (?,?,?,'abierta',?)",
       [fecha, hora, parseFloat(saldo_apertura), observaciones || null]
@@ -1803,13 +1810,13 @@ app.post('/api/caja/cerrar', tenantAuth, requireModulo('caja'), async (req, res)
     if (!rows.length) return res.status(409).json({ error: 'No hay una caja abierta' });
     const sesion = rows[0];
     const totales = await calcularTotalesCaja(req.tenantPool, sesion.id, sesion.saldo_apertura);
-    const now = new Date();
+    const { fecha: fechaCierre, hora: horaCierre } = fechaHoraBogota();
     const observaciones = req.body && req.body.observaciones ? req.body.observaciones : sesion.observaciones;
     await req.tenantPool.query(
       `UPDATE caja_sesiones SET estado='cerrada', fecha_cierre=?, hora_cierre=?,
          total_ventas=?, total_ingresos_otros=?, total_egresos=?, total_caja=?,
          desglose_metodos=?, observaciones=? WHERE id=?`,
-      [now.toISOString().slice(0,10), now.toTimeString().slice(0,8),
+      [fechaCierre, horaCierre,
        totales.ventas_total, totales.ingresos_otros_total, totales.egresos_total, totales.total_caja,
        JSON.stringify(totales.por_metodo), observaciones, sesion.id]
     );

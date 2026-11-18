@@ -2895,6 +2895,17 @@ function showCajaSubtab(tab){
   if(tab==='ventas') loadCajaVentas();
 }
 
+// fecha_apertura/fecha_cierre son columnas DATE (sin hora real): el driver las
+// devuelve como "YYYY-MM-DDT00:00:00.000Z". fmtDate() las pasaría por new Date()
+// y leería con getters locales, lo que en Bogotá (UTC-5) las corre un día hacia
+// atrás. Acá tomamos los primeros 10 caracteres tal cual (texto, sin conversión
+// de zona horaria) y armamos DD/MM/YYYY.
+function fmtFechaCaja(v){
+  if(!v) return '—';
+  var p = String(v).slice(0,10).split('-');
+  return p.length===3 ? (p[2]+'/'+p[1]+'/'+p[0]) : String(v);
+}
+
 function renderCajaDashboard(){
   var cerradaBox = document.getElementById('caja-cerrada-box');
   var abiertaBox = document.getElementById('caja-abierta-box');
@@ -2912,7 +2923,7 @@ function renderCajaDashboard(){
   var ventasActivas = ventas.filter(function(v){ return v.estado==='aceptada'; });
   var ingresos = (parseFloat(s.ventas_total)||0) + (parseFloat(s.ingresos_otros_total)||0);
 
-  document.getElementById('caja-hora-apertura').textContent = fmtDate(s.fecha_apertura)+', '+(s.hora_apertura||'').slice(0,5);
+  document.getElementById('caja-hora-apertura').textContent = fmtFechaCaja(s.fecha_apertura)+', '+(s.hora_apertura||'').slice(0,5);
   document.getElementById('dash-apertura').textContent = fmt(s.saldo_apertura);
   document.getElementById('dash-ventas').textContent = fmt(ingresos);
   document.getElementById('dash-egresos').textContent = fmt(s.egresos_total);
@@ -2958,8 +2969,8 @@ async function loadCajaHistorial(){
   }
   body.innerHTML = rows.map(function(r){
     return '<tr>'
-      + '<td>'+fmtDate(r.fecha_apertura)+' '+(r.hora_apertura||'').slice(0,5)+'</td>'
-      + '<td>'+fmtDate(r.fecha_cierre)+' '+(r.hora_cierre||'').slice(0,5)+'</td>'
+      + '<td>'+fmtFechaCaja(r.fecha_apertura)+' '+(r.hora_apertura||'').slice(0,5)+'</td>'
+      + '<td>'+fmtFechaCaja(r.fecha_cierre)+' '+(r.hora_cierre||'').slice(0,5)+'</td>'
       + '<td>'+fmt(r.saldo_apertura)+'</td>'
       + '<td>'+fmt(r.total_ventas)+'</td>'
       + '<td>'+fmt(r.total_ingresos_otros)+'</td>'
