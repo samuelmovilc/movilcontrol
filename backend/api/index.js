@@ -177,11 +177,12 @@ app.get('/api/health', async (req, res) => {
 // GET todos
 app.get('/api/productos', tenantAuth, requireModulo('pos','productos'), async (req, res) => {
   try {
-    const { nombre, codigo, stock_max, precio_min, precio_max, orden } = req.query;
+    const { nombre, codigo, categoria, stock_max, precio_min, precio_max, orden } = req.query;
     let sql = 'SELECT * FROM productos WHERE 1=1';
     const params = [];
     if (nombre)     { sql += ' AND nombre LIKE ?';        params.push('%'+nombre+'%'); }
     if (codigo)     { sql += ' AND id LIKE ?';            params.push('%'+codigo+'%'); }
+    if (categoria)  { sql += ' AND categoria = ?';        params.push(categoria); }
     if (stock_max)  { sql += ' AND stock <= ?';           params.push(parseInt(stock_max)); }
     if (precio_min) { sql += ' AND precio_venta >= ?';    params.push(parseFloat(precio_min)); }
     if (precio_max) { sql += ' AND precio_venta <= ?';    params.push(parseFloat(precio_max)); }
@@ -205,12 +206,12 @@ app.get('/api/productos/:id', tenantAuth, requireModulo('pos','productos'), asyn
 // POST crear
 app.post('/api/productos', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
-    const { id, nombre, precio_venta, precio_compra, stock, imagen } = req.body;
+    const { id, nombre, categoria, precio_venta, precio_compra, stock, imagen } = req.body;
     if (!id || !nombre || precio_venta == null || stock == null)
       return res.status(400).json({ error: 'Faltan campos' });
     await req.tenantPool.query(
-      'INSERT INTO productos (id,nombre,precio_venta,precio_compra,stock,entradas,salidas,imagen) VALUES (?,?,?,?,?,?,0,?)',
-      [id, nombre, precio_venta, precio_compra, stock, stock, imagen || null]
+      'INSERT INTO productos (id,nombre,categoria,precio_venta,precio_compra,stock,entradas,salidas,imagen) VALUES (?,?,?,?,?,?,?,0,?)',
+      [id, nombre, categoria || null, precio_venta, precio_compra, stock, stock, imagen || null]
     );
     const [rows] = await req.tenantPool.query('SELECT * FROM productos WHERE id=?', [id]);
     res.status(201).json(rows[0]);
@@ -223,13 +224,13 @@ app.post('/api/productos', tenantAuth, requireModulo('productos'), async (req, r
 // PUT actualizar
 app.put('/api/productos/:id', tenantAuth, requireModulo('productos'), async (req, res) => {
   try {
-    const { nombre, precio_venta, precio_compra, stock, imagen } = req.body;
+    const { nombre, categoria, precio_venta, precio_compra, stock, imagen } = req.body;
     const [old] = await req.tenantPool.query('SELECT stock, entradas FROM productos WHERE id=?', [req.params.id]);
     if (!old.length) return res.status(404).json({ error: 'No encontrado' });
     const diffE = stock > old[0].stock ? stock - old[0].stock : 0;
     await req.tenantPool.query(
-      'UPDATE productos SET nombre=?, precio_venta=?, precio_compra=?, stock=?, entradas=entradas+?, imagen=? WHERE id=?',
-      [nombre, precio_venta, precio_compra, stock, diffE, imagen !== undefined ? imagen : null, req.params.id]
+      'UPDATE productos SET nombre=?, categoria=?, precio_venta=?, precio_compra=?, stock=?, entradas=entradas+?, imagen=? WHERE id=?',
+      [nombre, categoria || null, precio_venta, precio_compra, stock, diffE, imagen !== undefined ? imagen : null, req.params.id]
     );
     const [rows] = await req.tenantPool.query('SELECT * FROM productos WHERE id=?', [req.params.id]);
     res.json(rows[0]);
@@ -269,20 +270,20 @@ app.post('/api/productos/importar', tenantAuth, requireModulo('productos'), asyn
     if (!Array.isArray(productos)) return res.status(400).json({ error: 'Array requerido' });
     let added=0, updated=0, errors=0;
     for (const p of productos) {
-      const { id, nombre, precio_venta, precio_compra, stock, imagen } = p;
+      const { id, nombre, categoria, precio_venta, precio_compra, stock, imagen } = p;
       if (!id || !nombre) { errors++; continue; }
       const [old] = await req.tenantPool.query('SELECT stock,entradas,imagen FROM productos WHERE id=?', [id]);
       if (old.length) {
         const dE = stock > old[0].stock ? stock - old[0].stock : 0;
         await req.tenantPool.query(
-          'UPDATE productos SET nombre=?,precio_venta=?,precio_compra=?,stock=?,entradas=entradas+?,imagen=? WHERE id=?',
-          [nombre, precio_venta, precio_compra, stock, dE, imagen !== undefined ? imagen : old[0].imagen, id]
+          'UPDATE productos SET nombre=?,categoria=?,precio_venta=?,precio_compra=?,stock=?,entradas=entradas+?,imagen=? WHERE id=?',
+          [nombre, categoria || null, precio_venta, precio_compra, stock, dE, imagen !== undefined ? imagen : old[0].imagen, id]
         );
         updated++;
       } else {
         await req.tenantPool.query(
-          'INSERT INTO productos (id,nombre,precio_venta,precio_compra,stock,entradas,salidas,imagen) VALUES (?,?,?,?,?,?,0,?)',
-          [id, nombre, precio_venta, precio_compra, stock, stock, imagen || null]
+          'INSERT INTO productos (id,nombre,categoria,precio_venta,precio_compra,stock,entradas,salidas,imagen) VALUES (?,?,?,?,?,?,?,0,?)',
+          [id, nombre, categoria || null, precio_venta, precio_compra, stock, stock, imagen || null]
         );
         added++;
       }
@@ -1895,6 +1896,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
       CREATE TABLE IF NOT EXISTS productos (
         id VARCHAR(50) PRIMARY KEY,
         nombre VARCHAR(150) NOT NULL,
+        categoria VARCHAR(100) NULL,
         precio_venta DECIMAL(10,2) NOT NULL,
         precio_min DECIMAL(10,2),
         precio_compra DECIMAL(10,2),

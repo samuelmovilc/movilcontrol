@@ -753,6 +753,11 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   <div class="filters-bar" style="margin-bottom:10px">
     <div class="filter-group"><label>Código</label><input type="text" id="f-codigo" placeholder="Buscar..." oninput="applyFilters()"></div>
     <div class="filter-group"><label>Nombre</label><input type="text" id="f-nombre" placeholder="Buscar..." oninput="applyFilters()" style="min-width:135px"></div>
+    <div class="filter-group"><label>Categoría</label>
+      <select id="f-categoria" onchange="applyFilters()" style="min-width:130px">
+        <option value="">— Todas —</option>
+      </select>
+    </div>
     <div class="filter-group"><label>Precio desde</label><input type="number" id="f-precio-min" placeholder="0.00" step="0.01" oninput="applyFilters()"></div>
     <div class="filter-group"><label>Precio hasta</label><input type="number" id="f-precio-max" placeholder="9999" step="0.01" oninput="applyFilters()"></div>
     <div class="filter-group"><label>Stock ≤</label><input type="number" id="f-stock-max" placeholder="ej:10" oninput="applyFilters()"></div>
@@ -792,14 +797,14 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   </div>
   <div class="import-notice">
     <i class="fa-solid fa-triangle-exclamation"></i>
-    <div><strong>⚠ IMPORTACIÓN:</strong> Si el código ya existe se <u>ACTUALIZA</u>. Si es nuevo se agrega. Formato: <code>codigo,nombre,precioVenta,precioCompra,stock</code>
+    <div><strong>⚠ IMPORTACIÓN:</strong> Si el código ya existe se <u>ACTUALIZA</u>. Si es nuevo se agrega. Formato: <code>codigo,nombre,precioVenta,precioCompra,stock,categoria</code> (la categoría es opcional, se puede dejar en blanco)
     &nbsp;<a href="#" onclick="downloadTemplate();return false" style="color:var(--red);text-decoration:underline;font-weight:700">📥 Descargar plantilla</a></div>
   </div>
   <div class="card">
     <div class="tbl-wrap tbl-wrap-capped" style="max-height:340px">
       <table><thead><tr>
         <th><input type="checkbox" id="select-all-chk" onchange="toggleSelectAll(this.checked)"></th>
-        <th>Código</th><th>Img</th><th>Nombre</th><th>P.Venta</th><th>P.Compra</th>
+        <th>Código</th><th>Img</th><th>Nombre</th><th>Categoría</th><th>P.Venta</th><th>P.Compra</th>
         <th>Stock</th><th>Entradas</th><th>Salidas</th><th>Fecha carga</th><th>Acciones</th>
       </tr></thead><tbody id="prod-body"></tbody></table>
     </div>
@@ -1295,6 +1300,9 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
       <div class="prod-form-grid">
         <div class="form-group"><label>Código *</label><input type="text" id="prod-codigo"></div>
         <div class="form-group"><label>Nombre *</label><input type="text" id="prod-nombre"></div>
+        <div class="form-group"><label>Categoría</label><input type="text" id="prod-categoria" list="prod-categorias-list" placeholder="Ej: Cabello, Uñas, Bebidas...">
+          <datalist id="prod-categorias-list"></datalist>
+        </div>
         <div class="form-group"><label>Precio venta *</label><input type="number" id="prod-precio-venta" step="0.01" min="0"></div>
         <div class="form-group"><label>Precio compra *</label><input type="number" id="prod-precio-compra" step="0.01" min="0"></div>
         <div class="form-group"><label>Stock *</label><input type="number" id="prod-stock" min="0"></div>
@@ -1867,6 +1875,7 @@ async function initApp(){
 async function loadProductos(){
   try{
     productosCache=await apiGet('/productos');
+    refreshCategoriasOptions();
     renderPosProducts();
     if(document.getElementById('module-productos').classList.contains('active'))renderProductsTable();
   }catch(e){toast('Error cargando productos','error')}
@@ -2985,12 +2994,14 @@ function getFilteredProducts(){
   var prods=productosCache;
   var fc=document.getElementById('f-codigo').value.trim().toLowerCase();
   var fn=document.getElementById('f-nombre').value.trim().toLowerCase();
+  var fcat=document.getElementById('f-categoria').value;
   var fpMin=parseFloat(document.getElementById('f-precio-min').value);
   var fpMax=parseFloat(document.getElementById('f-precio-max').value);
   var fsMax=parseInt(document.getElementById('f-stock-max').value);
   var fo=document.getElementById('f-orden').value;
   if(fc)prods=prods.filter(function(p){return p.id.toLowerCase().includes(fc)});
   if(fn)prods=prods.filter(function(p){return p.nombre.toLowerCase().includes(fn)});
+  if(fcat)prods=prods.filter(function(p){return (p.categoria||'')===fcat});
   if(!isNaN(fpMin))prods=prods.filter(function(p){return parseFloat(p.precio_venta)>=fpMin});
   if(!isNaN(fpMax))prods=prods.filter(function(p){return parseFloat(p.precio_venta)<=fpMax});
   if(!isNaN(fsMax))prods=prods.filter(function(p){return p.stock<=fsMax});
@@ -3000,14 +3011,26 @@ function getFilteredProducts(){
   else if(fo==='stock-desc')prods=prods.slice().sort(function(a,b){return b.stock-a.stock});
   else if(fo==='precio-asc')prods=prods.slice().sort(function(a,b){return parseFloat(a.precio_venta)-parseFloat(b.precio_venta)});
   else if(fo==='precio-desc')prods=prods.slice().sort(function(a,b){return parseFloat(b.precio_venta)-parseFloat(a.precio_venta)});
-  var cnt=0;if(fc)cnt++;if(fn)cnt++;if(!isNaN(fpMin))cnt++;if(!isNaN(fpMax))cnt++;if(!isNaN(fsMax))cnt++;if(fo)cnt++;
+  var cnt=0;if(fc)cnt++;if(fn)cnt++;if(fcat)cnt++;if(!isNaN(fpMin))cnt++;if(!isNaN(fpMax))cnt++;if(!isNaN(fsMax))cnt++;if(fo)cnt++;
   var badge=document.getElementById('filter-count');badge.style.display=cnt?'inline':'none';badge.textContent=cnt;
   return prods;
 }
 function applyFilters(){renderProductsTable();renderStats()}
 function clearFilters(){
   ['f-codigo','f-nombre','f-precio-min','f-precio-max','f-stock-max'].forEach(function(id){document.getElementById(id).value=''});
-  document.getElementById('f-orden').value='';applyFilters();
+  document.getElementById('f-orden').value='';document.getElementById('f-categoria').value='';applyFilters();
+}
+// Repuebla el desplegable de filtro y el autocompletar del formulario con las
+// categorías que el propio negocio ya ha usado (no hay una lista fija: cada
+// quien decide sus categorías simplemente escribiéndolas en un producto).
+function refreshCategoriasOptions(){
+  var categorias=[...new Set(productosCache.map(function(p){return p.categoria}).filter(Boolean))].sort();
+  var sel=document.getElementById('f-categoria');
+  var selVal=sel.value;
+  sel.innerHTML='<option value="">— Todas —</option>'+categorias.map(function(c){return '<option value="'+c+'">'+c+'</option>'}).join('');
+  sel.value=categorias.includes(selVal)?selVal:'';
+  var datalist=document.getElementById('prod-categorias-list');
+  if(datalist) datalist.innerHTML=categorias.map(function(c){return '<option value="'+c+'">'}).join('');
 }
 function renderProductsTable(){
   var prods=getFilteredProducts();
@@ -3023,6 +3046,7 @@ function renderProductsTable(){
       +'<td data-label="Código" style="font-size:10.5px;color:var(--text-light);white-space:nowrap">'+p.id+'</td>'
       +'<td data-label="Imagen">'+(p.imagen?'<img src="'+p.imagen+'" style="width:24px;height:24px;object-fit:cover;border-radius:4px;border:1px solid #ddd">':'<div style="width:24px;height:24px;background:#eee;border-radius:4px"></div>')+'</td>'
       +'<td data-label="Nombre" style="font-weight:600">'+p.nombre+'</td>'
+      +'<td data-label="Categoría" style="color:var(--text-mid)">'+(p.categoria||'—')+'</td>'
       +'<td data-label="P.Venta" style="color:var(--electric);font-weight:700">'+fmt(pv)+'</td>'
       +'<td data-label="P.Compra" style="color:var(--text-mid)">'+fmt(pc)+'</td>'
       +'<td data-label="Stock"><span class="badge-stock '+sc+'">'+p.stock+'</span></td>'
@@ -3034,7 +3058,7 @@ function renderProductsTable(){
       +'<button class="btn btn-warning btn-xs" onclick="openStockModal(\''+p.id+'\')"><i class="fa-solid fa-cubes"></i></button> '
       +'<button class="btn btn-danger btn-xs" onclick="deleteProduct(\''+p.id+'\')"><i class="fa-solid fa-trash"></i></button>'
       +'</td></tr>';
-  }).join('')||'<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text-light)">Sin productos</td></tr>';
+  }).join('')||'<tr><td colspan="12" style="text-align:center;padding:28px;color:var(--text-light)">Sin productos</td></tr>';
 }
 function toggleSelectAll(checked){
   var master=document.getElementById('select-all-chk');
@@ -3067,6 +3091,7 @@ function openProductModal(id){
     title.innerHTML='<i class="fa-solid fa-pen"></i> Editar: '+p.nombre;
     document.getElementById('prod-codigo').value=p.id;
     document.getElementById('prod-nombre').value=p.nombre;
+    document.getElementById('prod-categoria').value=p.categoria||'';
     document.getElementById('prod-precio-venta').value=p.precio_venta;
     document.getElementById('prod-precio-compra').value=p.precio_compra;
     document.getElementById('prod-stock').value=p.stock;
@@ -3078,7 +3103,7 @@ function openProductModal(id){
     else{ document.getElementById('prod-imagen-preview').style.display='none'; }
   }else{
     title.innerHTML='<i class="fa-solid fa-plus"></i> Nuevo Producto';
-    ['prod-codigo','prod-nombre','prod-precio-venta','prod-precio-compra','prod-stock','prod-imagen'].forEach(function(i){document.getElementById(i).value=''});
+    ['prod-codigo','prod-nombre','prod-categoria','prod-precio-venta','prod-precio-compra','prod-stock','prod-imagen'].forEach(function(i){document.getElementById(i).value=''});
     document.getElementById('prod-fecha').value=todayStr();
     document.getElementById('prod-codigo').disabled=false;
     currentProdImagen = null;
@@ -3089,6 +3114,7 @@ function openProductModal(id){
 async function saveProduct(){
   var codigo=document.getElementById('prod-codigo').value.trim();
   var nombre=document.getElementById('prod-nombre').value.trim();
+  var categoria=document.getElementById('prod-categoria').value.trim()||null;
   var pv=parseFloat(document.getElementById('prod-precio-venta').value)||0;
   var pc=parseFloat(document.getElementById('prod-precio-compra').value)||0;
   var stock=parseInt(document.getElementById('prod-stock').value)||0;
@@ -3097,10 +3123,10 @@ async function saveProduct(){
   showLoading('Guardando...');
   try{
     if(editingProductId){
-      await apiPut('/productos/'+editingProductId,{nombre:nombre,precio_venta:pv,precio_compra:pc,stock:stock,imagen:img});
+      await apiPut('/productos/'+editingProductId,{nombre:nombre,categoria:categoria,precio_venta:pv,precio_compra:pc,stock:stock,imagen:img});
       toast('Producto actualizado','success');
     }else{
-      await apiPost('/productos',{id:codigo,nombre:nombre,precio_venta:pv,precio_compra:pc,stock:stock,imagen:img});
+      await apiPost('/productos',{id:codigo,nombre:nombre,categoria:categoria,precio_venta:pv,precio_compra:pc,stock:stock,imagen:img});
       toast('Producto agregado','success');
     }
     closeModal('modal-producto');
@@ -3149,7 +3175,7 @@ function downloadTemplate(){
   // Plantilla en Excel real (.xlsx), para clientes que no saben convertir a CSV.
   if(typeof XLSX!=='undefined'){
     try{
-      var datos=[['codigo','nombre','precioVenta','precioCompra','stock'],['750100000011','Ejemplo A',15.00,10.00,50]];
+      var datos=[['codigo','nombre','precioVenta','precioCompra','stock','categoria'],['750100000011','Ejemplo A',15.00,10.00,50,'Cabello']];
       var ws=XLSX.utils.aoa_to_sheet(datos);
       var wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb,ws,'Productos');
@@ -3157,7 +3183,7 @@ function downloadTemplate(){
       return;
     }catch(e){/* si falla, cae al CSV de respaldo abajo */}
   }
-  var csv='codigo,nombre,precioVenta,precioCompra,stock\n750100000011,"Ejemplo A",15.00,10.00,50';
+  var csv='codigo,nombre,precioVenta,precioCompra,stock,categoria\n750100000011,"Ejemplo A",15.00,10.00,50,"Cabello"';
   var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='PLANTILLA.csv';a.click();URL.revokeObjectURL(url);
 }
@@ -3169,7 +3195,7 @@ function _filasAProductos(filas){
     var codigo=String(cols[0]!=null?cols[0]:'').trim();
     var nombre=String(cols[1]!=null?cols[1]:'').trim();
     if(codigo&&nombre)
-      productos.push({id:codigo,nombre:nombre,precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseInt(cols[4])||0});
+      productos.push({id:codigo,nombre:nombre,precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseInt(cols[4])||0,categoria:(cols[5]!=null&&String(cols[5]).trim())?String(cols[5]).trim():null});
   });
   return productos;
 }
@@ -3210,7 +3236,7 @@ async function importExcel(input){
     lines.slice(1).forEach(function(line){
       var cols=line.split(',').map(function(c){return c.replace(/^"|"$/g,'').trim()});
       if(cols.length>=5&&cols[0]&&cols[1])
-        productos.push({id:cols[0],nombre:cols[1],precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseInt(cols[4])||0});
+        productos.push({id:cols[0],nombre:cols[1],precio_venta:parseFloat(cols[2])||0,precio_compra:parseFloat(cols[3])||0,stock:parseInt(cols[4])||0,categoria:(cols[5]&&cols[5].trim())?cols[5].trim():null});
     });
     if(!productos.length){toast('Sin datos válidos','error');input.value='';return}
     showLoading('Importando '+productos.length+' productos...');
