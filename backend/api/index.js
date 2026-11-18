@@ -1762,7 +1762,20 @@ app.get('/api/caja/sesion-actual', tenantAuth, requireModulo('pos','caja'), asyn
     if (!rows.length) return res.json({ abierta: false });
     const sesion = rows[0];
     const totales = await calcularTotalesCaja(req.tenantPool, sesion.id, sesion.saldo_apertura);
-    res.json(Object.assign({ abierta: true }, sesion, totales));
+    // detalle=1: además de los totales, trae las ventas y gastos del turno (para pintar
+    // las tablas "Ventas Registradas" / "Gastos Registrados" del dashboard). Se deja
+    // opcional para que el chequeo rápido de "¿hay caja abierta?" (antes de vender/
+    // anular) no tenga que cargar listas completas cada vez.
+    let detalle = {};
+    if (req.query.detalle === '1') {
+      const [ventas] = await req.tenantPool.query("SELECT * FROM ventas WHERE caja_sesion_id=? ORDER BY id DESC", [sesion.id]);
+      const [movimientos] = await req.tenantPool.query(
+        "SELECT * FROM movimientos_caja WHERE caja_sesion_id=? AND tipo='egreso' AND categoria NOT IN ('Pago Técnico','Comisión POS') ORDER BY id DESC",
+        [sesion.id]
+      );
+      detalle = { ventas, movimientos };
+    }
+    res.json(Object.assign({ abierta: true }, sesion, totales, detalle));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

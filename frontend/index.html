@@ -90,9 +90,33 @@ tbody td{padding:5px 9px}
 .multi-pay-row select{flex:1;padding:3px 6px;border:1.5px solid var(--border);border-radius:3px;font-size:11px;outline:none;background:#fff}
 .multi-pay-row input{width:78px;padding:3px 6px;border:1.5px solid var(--border);border-radius:3px;font-size:11px;text-align:right;outline:none;background:#fff}
 .caja-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
-.caja-dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px}
 .metodo-pill{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:7px 16px;font-size:12.5px;font-weight:700;color:var(--text-mid)}
 .metodo-pill strong{color:var(--electric);margin-left:5px}
+
+.caja-subtabs{display:flex;gap:8px;margin-bottom:14px}
+.caja-subtab-btn{padding:8px 18px;border-radius:8px;border:none;background:var(--surface2);color:var(--text-mid);font-weight:700;font-size:12.5px;cursor:pointer;transition:background .15s,color .15s}
+.caja-subtab-btn.active{background:var(--electric-dark);color:#fff}
+.caja-subtab-btn:not(.active):hover{background:var(--electric-pale)}
+
+.turno-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.turno-estado{font-size:14.5px;font-weight:800;color:var(--green-dark);display:flex;align-items:center;gap:6px}
+.turno-estado .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green)}
+.turno-fecha{font-size:11.5px;color:var(--text-light);margin-top:2px}
+
+.turno-metricas{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.metrica-box{border-radius:10px;padding:14px 16px;border:1.5px solid var(--border);background:#fff}
+.metrica-box .m-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--text-light);margin-bottom:6px}
+.metrica-box .m-value{font-size:22px;font-weight:800;color:var(--text)}
+.metrica-box.ingresos{background:#E6F9F2;border-color:#bdeedd}
+.metrica-box.ingresos .m-label,.metrica-box.ingresos .m-value{color:var(--green-dark)}
+.metrica-box.egresos{background:var(--red-pale);border-color:#f9b3b0}
+.metrica-box.egresos .m-label,.metrica-box.egresos .m-value{color:var(--red)}
+.metrica-box.saldo{border-color:var(--electric-mid);border-width:2px}
+.metrica-box.saldo .m-label,.metrica-box.saldo .m-value{color:var(--electric)}
+
+.turno-tablas{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.turno-tabla-box{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.turno-tabla-box .tt-header{background:var(--surface2);padding:9px 13px;font-size:12.5px;font-weight:700;color:var(--text-mid);border-bottom:1px solid var(--border)}
 .summary-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);text-align:center}
 .summary-card .s-label{font-size:10.5px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .summary-card .s-value{font-size:22px;font-weight:800;color:var(--electric)}
@@ -389,6 +413,8 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   .config-grid, .stats-grid, .caja-summary, .lbl-cfg-grid, .prod-form-grid {
     grid-template-columns: 1fr;
   }
+  .turno-metricas { grid-template-columns: repeat(2,1fr); }
+  .turno-tablas { grid-template-columns: 1fr; }
 }
 /* MOBILE ONLY HELPERS */
 .mobile-only { display: none; }
@@ -721,66 +747,106 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 
 <!-- CAJA -->
 <div id="module-caja" class="module">
-  <h2 class="section-title"><i class="fa-solid fa-coins"></i> Caja</h2>
+  <h2 class="section-title" style="margin-bottom:2px"><i class="fa-solid fa-coins"></i> Sistema de Caja</h2>
+  <p style="color:var(--text-light);font-size:12.5px;margin:0 0 14px">Control de turnos, ingresos y gastos operativos</p>
 
-  <!-- Caja CERRADA -->
-  <div class="card" id="caja-cerrada-box" style="display:none;text-align:center;padding:40px 20px">
-    <i class="fa-solid fa-lock" style="font-size:38px;color:var(--red);margin-bottom:10px;display:block"></i>
-    <h3 style="margin:0 0 6px">Caja cerrada</h3>
-    <p style="color:var(--text-light);margin:0 0 16px;font-size:13px">No se pueden registrar ventas, anulaciones, gastos ni abonos hasta abrir la caja.</p>
-    <button class="btn btn-primary" onclick="openModal('modal-abrir-caja')"><i class="fa-solid fa-lock-open"></i> Abrir Caja</button>
+  <div class="caja-subtabs">
+    <button class="caja-subtab-btn active" id="caja-subtab-btn-operacion" onclick="showCajaSubtab('operacion')">Operación</button>
+    <button class="caja-subtab-btn" id="caja-subtab-btn-historial" onclick="showCajaSubtab('historial')">Historial de Cierres</button>
+    <button class="caja-subtab-btn" id="caja-subtab-btn-ventas" onclick="showCajaSubtab('ventas')">Historial de Ventas</button>
   </div>
 
-  <!-- Caja ABIERTA -->
-  <div id="caja-abierta-box" style="display:none">
-    <div class="card" style="padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div style="font-size:12.5px;color:var(--text-mid)"><i class="fa-solid fa-circle" style="color:var(--green);font-size:8px"></i> Caja abierta desde <strong id="caja-hora-apertura">—</strong></div>
-      <button class="btn btn-danger btn-sm" onclick="confirmarCerrarCaja()"><i class="fa-solid fa-lock"></i> Cerrar Caja</button>
+  <!-- ═══ OPERACIÓN ═══ -->
+  <div id="caja-subtab-operacion" class="caja-subtab-content">
+    <!-- Caja CERRADA -->
+    <div class="card" id="caja-cerrada-box" style="display:none;text-align:center;padding:40px 20px">
+      <i class="fa-solid fa-lock" style="font-size:38px;color:var(--red);margin-bottom:10px;display:block"></i>
+      <h3 style="margin:0 0 6px">Caja cerrada</h3>
+      <p style="color:var(--text-light);margin:0 0 16px;font-size:13px">No se pueden registrar ventas, anulaciones, gastos ni abonos hasta abrir la caja.</p>
+      <button class="btn btn-primary" onclick="openModal('modal-abrir-caja')"><i class="fa-solid fa-lock-open"></i> Abrir Caja</button>
     </div>
 
-    <div class="caja-dashboard">
-      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-sack-dollar"></i> Saldo apertura</div><div class="s-value" id="dash-apertura">$0.00</div></div>
-      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-cart-shopping"></i> Ventas (<span id="dash-ventas-count">0</span>)</div><div class="s-value green" id="dash-ventas">$0.00</div></div>
-      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-hand-holding-dollar"></i> Abonos recibidos</div><div class="s-value" id="dash-abonos">$0.00</div></div>
-      <div class="summary-card" style="cursor:pointer" onclick="abrirModalCajaGastos()" title="Ver detalle de gastos">
-        <div class="s-label"><i class="fa-solid fa-receipt"></i> Egresos / Gastos</div>
-        <div class="s-value" style="color:var(--red)" id="dash-egresos">$0.00</div>
-        <div style="font-size:10.5px;margin-top:4px;color:var(--electric);font-weight:700"><i class="fa-solid fa-file-excel"></i> Ver detalle</div>
+    <!-- Caja ABIERTA -->
+    <div class="card" id="caja-abierta-box" style="display:none;padding:18px">
+      <div class="turno-header">
+        <div>
+          <div class="turno-estado"><span class="dot"></span> CAJA ABIERTA</div>
+          <div class="turno-fecha">Abierta el: <strong id="caja-hora-apertura">—</strong></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-success btn-sm" onclick="abrirModalCajaGastos()"><i class="fa-solid fa-plus"></i> Registrar Gasto</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmarCerrarCaja()"><i class="fa-solid fa-lock"></i> Cerrar Caja</button>
+        </div>
+      </div>
+
+      <div class="turno-metricas">
+        <div class="metrica-box"><div class="m-label">Saldo inicial (base)</div><div class="m-value" id="dash-apertura">$0</div></div>
+        <div class="metrica-box ingresos"><div class="m-label">+ Ingresos (ventas)</div><div class="m-value" id="dash-ventas">$0</div></div>
+        <div class="metrica-box egresos"><div class="m-label">- Gastos (egresos)</div><div class="m-value" id="dash-egresos">$0</div></div>
+        <div class="metrica-box saldo"><div class="m-label">= Saldo actual</div><div class="m-value" id="dash-total-caja">$0</div></div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;margin-bottom:6px">Total por método de pago</div>
+        <div id="dash-total-por-metodo" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+
+      <div class="turno-tablas">
+        <div class="turno-tabla-box">
+          <div class="tt-header">Gastos Registrados (<span id="dash-gastos-count">0</span>)</div>
+          <div class="tbl-wrap" style="max-height:260px">
+            <table style="font-size:12px"><thead><tr><th>Categoría / Obs</th><th>Método</th><th>Monto</th><th></th></tr></thead><tbody id="turno-gastos-body"></tbody></table>
+          </div>
+        </div>
+        <div class="turno-tabla-box">
+          <div class="tt-header">Ventas Registradas (<span id="dash-ventas-count">0</span> activas)</div>
+          <div class="tbl-wrap" style="max-height:260px">
+            <table style="font-size:12px"><thead><tr><th>Hora</th><th>Folio</th><th>Monto</th><th>Acciones</th></tr></thead><tbody id="turno-ventas-body"></tbody></table>
+          </div>
+        </div>
       </div>
     </div>
+  </div>
 
-    <div class="card" style="padding:16px">
-      <div class="card-header"><i class="fa-solid fa-vault"></i> Total en caja</div>
-      <div style="font-size:30px;font-weight:800;color:var(--electric);text-align:center;margin:10px 0" id="dash-total-caja">$0.00</div>
-      <div id="dash-total-por-metodo" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center"></div>
+  <!-- ═══ HISTORIAL DE CIERRES ═══ -->
+  <div id="caja-subtab-historial" class="caja-subtab-content" style="display:none">
+    <div class="card">
+      <div class="card-header"><i class="fa-solid fa-clock-rotate-left"></i> Turnos cerrados</div>
+      <div class="tbl-wrap">
+        <table style="font-size:12px"><thead><tr>
+          <th>Apertura</th><th>Cierre</th><th>Saldo inicial</th><th>Ventas</th><th>Abonos</th><th>Gastos</th><th>Saldo final</th><th></th>
+        </tr></thead><tbody id="caja-historial-body"></tbody></table>
+      </div>
     </div>
   </div>
 
-  <h2 class="section-title" style="margin-top:22px"><i class="fa-solid fa-clock-rotate-left"></i> Historial de ventas</h2>
-  <div class="caja-summary">
-    <div class="summary-card"><div class="s-label"><i class="fa-solid fa-money-bill-wave"></i> Total vendido</div><div class="s-value" id="sum-total">$0.00</div></div>
-    <div class="summary-card"><div class="s-label"><i class="fa-solid fa-chart-line"></i> Utilidad bruta</div><div class="s-value green" id="sum-utilidad">$0.00</div></div>
-    <div class="summary-card"><div class="s-label"><i class="fa-solid fa-percent"></i> % Utilidad</div><div class="s-value orange" id="sum-pct">0.00%</div></div>
-  </div>
-  <div class="card">
-    <div class="card-header"><i class="fa-solid fa-calendar-days"></i> Filtros</div>
-    <div class="caja-top">
-      <label>Fecha inicio:</label><input type="date" id="caja-date-from" onchange="loadCajaVentas()">
-      <label>Fecha fin:</label><input type="date" id="caja-date-to" onchange="loadCajaVentas()">
-      <label>Estado:</label>
-      <select id="caja-estado" onchange="loadCajaVentas()">
-        <option value="todas">Todas</option><option value="aceptada">Aceptadas</option><option value="anulada">Anuladas</option>
-      </select>
-      <button class="btn btn-secondary btn-sm" onclick="loadCajaVentas()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
-      <button class="btn btn-excel btn-sm" id="btn-exportar-excel" onclick="exportarExcelCaja()" style="display:none"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
-      <button class="btn btn-orange btn-sm" id="btn-exportar-resumen" onclick="exportarResumenMetodos()" style="display:none"><i class="fa-solid fa-file-invoice-dollar"></i> Exportar Caja PDF</button>
-      <div style="margin-left:auto;font-size:12px;color:var(--text-mid)">Total: <strong id="caja-total-dia" style="color:var(--electric)">$0.00</strong> &nbsp;·&nbsp; <span id="caja-count-dia">0</span> ventas</div>
+  <!-- ═══ HISTORIAL DE VENTAS (todas, por rango de fechas) ═══ -->
+  <div id="caja-subtab-ventas" class="caja-subtab-content" style="display:none">
+    <div class="caja-summary">
+      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-money-bill-wave"></i> Total vendido</div><div class="s-value" id="sum-total">$0.00</div></div>
+      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-chart-line"></i> Utilidad bruta</div><div class="s-value green" id="sum-utilidad">$0.00</div></div>
+      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-percent"></i> % Utilidad</div><div class="s-value orange" id="sum-pct">0.00%</div></div>
     </div>
-    <div class="tbl-wrap">
-      <table><thead><tr>
-        <th><input type="checkbox" id="caja-select-all" onchange="toggleCajaSelect(this.checked)"></th>
-        <th>Folio</th><th>Hora</th><th>Cliente</th><th>Ítems</th><th>Total</th><th>Método(s) pago</th><th>Obs.</th><th>Estado</th><th>Acciones</th>
-      </tr></thead><tbody id="caja-body"></tbody></table>
+    <div class="card">
+      <div class="card-header"><i class="fa-solid fa-calendar-days"></i> Filtros</div>
+      <div class="caja-top">
+        <label>Fecha inicio:</label><input type="date" id="caja-date-from" onchange="loadCajaVentas()">
+        <label>Fecha fin:</label><input type="date" id="caja-date-to" onchange="loadCajaVentas()">
+        <label>Estado:</label>
+        <select id="caja-estado" onchange="loadCajaVentas()">
+          <option value="todas">Todas</option><option value="aceptada">Aceptadas</option><option value="anulada">Anuladas</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="loadCajaVentas()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        <button class="btn btn-excel btn-sm" id="btn-exportar-excel" onclick="exportarExcelCaja()" style="display:none"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
+        <button class="btn btn-orange btn-sm" id="btn-exportar-resumen" onclick="exportarResumenMetodos()" style="display:none"><i class="fa-solid fa-file-invoice-dollar"></i> Exportar Caja PDF</button>
+        <div style="margin-left:auto;font-size:12px;color:var(--text-mid)">Total: <strong id="caja-total-dia" style="color:var(--electric)">$0.00</strong> &nbsp;·&nbsp; <span id="caja-count-dia">0</span> ventas</div>
+      </div>
+      <div class="tbl-wrap">
+        <table><thead><tr>
+          <th><input type="checkbox" id="caja-select-all" onchange="toggleCajaSelect(this.checked)"></th>
+          <th>Folio</th><th>Hora</th><th>Cliente</th><th>Ítems</th><th>Total</th><th>Método(s) pago</th><th>Obs.</th><th>Estado</th><th>Acciones</th>
+        </tr></thead><tbody id="caja-body"></tbody></table>
+      </div>
     </div>
   </div>
 </div>
@@ -1389,28 +1455,22 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   </div>
 </div>
 <div class="modal-overlay" id="modal-caja-gastos">
-  <div class="modal" style="max-width:660px">
-    <div class="modal-header"><span><i class="fa-solid fa-receipt"></i> Egresos / Gastos de la caja</span><button class="modal-close" onclick="closeModal('modal-caja-gastos')"><i class="fa-solid fa-xmark"></i></button></div>
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header"><span><i class="fa-solid fa-receipt"></i> Registrar Gasto del Turno</span><button class="modal-close" onclick="closeModal('modal-caja-gastos')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:6px">
-        <div class="form-group"><label>Categoría</label>
-          <div style="display:flex;gap:4px">
-            <select id="caja-gasto-categoria" style="flex:1"><option value="">— Selecciona —</option></select>
-            <button type="button" class="btn btn-secondary btn-xs" onclick="nuevaCategoriaGasto('caja-gasto-categoria')" title="Nueva categoría"><i class="fa-solid fa-plus"></i></button>
-          </div>
+      <div class="form-group"><label>Categoría</label>
+        <div style="display:flex;gap:6px">
+          <select id="caja-gasto-categoria" style="flex:1"><option value="">Seleccione Categoría...</option></select>
+          <button type="button" class="btn btn-primary btn-sm" style="padding:0 14px" onclick="nuevaCategoriaGasto('caja-gasto-categoria')" title="Nueva categoría"><i class="fa-solid fa-plus"></i></button>
         </div>
-        <div class="form-group"><label>Monto</label><input type="number" id="caja-gasto-monto" min="0" step="0.01" placeholder="0"></div>
-        <div class="form-group"><label>Método</label><select id="caja-gasto-metodo"></select></div>
-        <div class="form-group" style="grid-column:1/-1"><label>Observaciones</label><input type="text" id="caja-gasto-obs" placeholder="Opcional"></div>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="registrarCajaGasto()"><i class="fa-solid fa-floppy-disk"></i> Registrar Gasto</button>
-      <div class="tbl-wrap" style="margin-top:14px;max-height:280px">
-        <table style="font-size:12px">
-          <thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr></thead>
-          <tbody id="caja-gastos-body"></tbody>
-        </table>
-      </div>
-      <div style="text-align:right;margin-top:8px;font-weight:700;font-size:13px">Total gastos de este turno: <span id="caja-gastos-total" style="color:var(--red)">$0.00</span></div>
+      <div class="form-group"><label>Observación</label><input type="text" id="caja-gasto-obs" placeholder="Detalles (Ej. Vasos y servilletas)"></div>
+      <div class="form-group"><label>Método de pago</label><select id="caja-gasto-metodo"></select></div>
+      <div class="form-group"><label>Monto</label><input type="number" id="caja-gasto-monto" min="0" step="0.01" placeholder="0"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-caja-gastos')">Cancelar</button>
+      <button class="btn btn-danger" onclick="registrarCajaGasto()"><i class="fa-solid fa-floppy-disk"></i> Guardar Gasto</button>
     </div>
   </div>
 </div>
@@ -2805,9 +2865,12 @@ function toggleCajaSelect(checked){document.querySelectorAll('.caja-chk').forEac
 /* ═══ CAJA: apertura / cierre de turno ═══ */
 var cajaSesionActual = {abierta:false};
 
+// Siempre pide el detalle (ventas + gastos del turno) junto con los totales: los
+// turnos son chicos (un puñado de ventas/gastos por jornada), así que no vale la
+// pena mantener dos variantes de la consulta.
 async function loadCajaSesion(){
   try{
-    cajaSesionActual = await apiGet('/caja/sesion-actual');
+    cajaSesionActual = await apiGet('/caja/sesion-actual?detalle=1');
   }catch(e){
     cajaSesionActual = {abierta:false};
   }
@@ -2822,6 +2885,16 @@ async function cajaEstaAbierta(){
   return !!(cajaSesionActual && cajaSesionActual.abierta);
 }
 
+function showCajaSubtab(tab){
+  ['operacion','historial','ventas'].forEach(function(t){
+    var box=document.getElementById('caja-subtab-'+t), btn=document.getElementById('caja-subtab-btn-'+t);
+    if(box) box.style.display = (t===tab)?'block':'none';
+    if(btn) btn.classList.toggle('active', t===tab);
+  });
+  if(tab==='historial') loadCajaHistorial();
+  if(tab==='ventas') loadCajaVentas();
+}
+
 function renderCajaDashboard(){
   var cerradaBox = document.getElementById('caja-cerrada-box');
   var abiertaBox = document.getElementById('caja-abierta-box');
@@ -2834,14 +2907,74 @@ function renderCajaDashboard(){
   cerradaBox.style.display='none';
   abiertaBox.style.display='block';
   var s = cajaSesionActual;
-  document.getElementById('caja-hora-apertura').textContent = (s.hora_apertura||'').slice(0,5);
+  var ventas = s.ventas || [];
+  var gastos = s.movimientos || [];
+  var ventasActivas = ventas.filter(function(v){ return v.estado==='aceptada'; });
+  var ingresos = (parseFloat(s.ventas_total)||0) + (parseFloat(s.ingresos_otros_total)||0);
+
+  document.getElementById('caja-hora-apertura').textContent = fmtDate(s.fecha_apertura)+', '+(s.hora_apertura||'').slice(0,5);
   document.getElementById('dash-apertura').textContent = fmt(s.saldo_apertura);
-  document.getElementById('dash-ventas-count').textContent = s.ventas_cantidad||0;
-  document.getElementById('dash-ventas').textContent = fmt(s.ventas_total);
-  document.getElementById('dash-abonos').textContent = fmt(s.ingresos_otros_total);
+  document.getElementById('dash-ventas').textContent = fmt(ingresos);
   document.getElementById('dash-egresos').textContent = fmt(s.egresos_total);
   document.getElementById('dash-total-caja').textContent = fmt(s.total_caja);
   document.getElementById('dash-total-por-metodo').innerHTML = renderMetodosPill(s.por_metodo || {});
+
+  document.getElementById('dash-gastos-count').textContent = gastos.length;
+  var gastosBody = document.getElementById('turno-gastos-body');
+  gastosBody.innerHTML = gastos.length ? gastos.map(function(r){
+    return '<tr>'
+      + '<td><strong>'+r.categoria+'</strong>'+(r.observaciones?'<br><span style="color:var(--text-light);font-size:11px">'+r.observaciones+'</span>':'')+'</td>'
+      + '<td>'+(r.metodo_pago||'—')+'</td>'
+      + '<td style="color:var(--red);font-weight:700">'+fmt(r.monto)+'</td>'
+      + '<td><button class="btn btn-danger btn-xs" onclick="eliminarCajaGasto('+r.id+')"><i class="fa-solid fa-trash"></i></button></td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:14px">No hay gastos en este turno</td></tr>';
+
+  document.getElementById('dash-ventas-count').textContent = ventasActivas.length;
+  var ventasBody = document.getElementById('turno-ventas-body');
+  ventasBody.innerHTML = ventas.length ? ventas.map(function(v){
+    var anulada = v.estado==='anulada';
+    return '<tr>'
+      + '<td>'+(v.hora||'').slice(0,5)+'</td>'
+      + '<td>'+v.folio+'</td>'
+      + '<td style="font-weight:700">'+fmt(v.total)+'</td>'
+      + '<td>'+(anulada
+          ? '<span class="badge-estado anulada">Anulada</span>'
+          : '<button class="btn btn-danger btn-xs" onclick="anularVenta(\''+v.folio+'\')"><i class="fa-solid fa-ban"></i></button>')
+        +' <button class="btn btn-primary btn-xs" onclick="reprintFromFolio(\''+v.folio+'\')"><i class="fa-solid fa-print"></i></button>'
+      + '</td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:14px">No hay ventas en este turno</td></tr>';
+}
+
+async function loadCajaHistorial(){
+  var body = document.getElementById('caja-historial-body');
+  var rows;
+  try{ rows = await apiGet('/caja/sesiones'); }catch(e){ toast('Error cargando historial: '+e.message,'error'); return; }
+  rows = rows.filter(function(r){ return r.estado==='cerrada'; });
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:16px">Sin turnos cerrados todavía.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(function(r){
+    return '<tr>'
+      + '<td>'+fmtDate(r.fecha_apertura)+' '+(r.hora_apertura||'').slice(0,5)+'</td>'
+      + '<td>'+fmtDate(r.fecha_cierre)+' '+(r.hora_cierre||'').slice(0,5)+'</td>'
+      + '<td>'+fmt(r.saldo_apertura)+'</td>'
+      + '<td>'+fmt(r.total_ventas)+'</td>'
+      + '<td>'+fmt(r.total_ingresos_otros)+'</td>'
+      + '<td style="color:var(--red)">'+fmt(r.total_egresos)+'</td>'
+      + '<td style="font-weight:700;color:var(--electric)">'+fmt(r.total_caja)+'</td>'
+      + '<td><button class="btn btn-secondary btn-xs" onclick="reimprimirCierre('+r.id+')" title="Reimprimir cierre"><i class="fa-solid fa-print"></i></button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+async function reimprimirCierre(id){
+  try{
+    var s = await apiGet('/caja/sesiones/'+id);
+    imprimirCierreCaja(s);
+  }catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 // Muestra siempre todos los métodos configurados en Configuración (aunque estén en
@@ -2982,7 +3115,9 @@ async function abrirModalCajaGastos(){
   if(!cajaSesionActual || !cajaSesionActual.abierta){ toast('No hay caja abierta','error'); return; }
   populateMetodoSelect('caja-gasto-metodo');
   await loadCategoriasGasto();
-  await loadCajaGastosList();
+  document.getElementById('caja-gasto-monto').value='';
+  document.getElementById('caja-gasto-obs').value='';
+  document.getElementById('caja-gasto-categoria').value='';
   openModal('modal-caja-gastos');
 }
 
@@ -3002,41 +3137,10 @@ async function registrarCajaGasto(){
   try{
     await apiPost('/movimientos', payload);
     toast('Gasto registrado','success');
-    document.getElementById('caja-gasto-monto').value='';
-    document.getElementById('caja-gasto-obs').value='';
-    await loadCajaGastosList();
+    closeModal('modal-caja-gastos');
     await loadCajaSesion();
     loadEgresosDia();
   }catch(e){ toast('Error: '+e.message,'error'); }
-}
-
-async function loadCajaGastosList(){
-  var body = document.getElementById('caja-gastos-body');
-  if(!cajaSesionActual || !cajaSesionActual.id){
-    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">Sin caja abierta.</td></tr>';
-    document.getElementById('caja-gastos-total').textContent = fmt(0);
-    return;
-  }
-  var rows;
-  try{ rows = await apiGet('/movimientos?tipo=egreso&caja_sesion_id='+cajaSesionActual.id); }catch(e){ toast('Error cargando gastos: '+e.message,'error'); return; }
-  rows = rows.filter(function(r){ return r.categoria !== 'Pago Técnico' && r.categoria !== 'Comisión POS'; });
-  var total = rows.reduce(function(s,r){return s+parseFloat(r.monto||0)},0);
-  document.getElementById('caja-gastos-total').textContent = fmt(total);
-  if(!rows.length){
-    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">Sin gastos registrados en este turno.</td></tr>';
-    return;
-  }
-  body.innerHTML = rows.map(function(r){
-    var f = r.fecha || (r.created_at ? String(r.created_at).slice(0,10) : '');
-    return '<tr>'
-      + '<td>'+fmtDate(f)+'</td>'
-      + '<td>'+r.categoria+'</td>'
-      + '<td>'+fmt(r.monto)+'</td>'
-      + '<td>'+(r.metodo_pago||'—')+'</td>'
-      + '<td>'+(r.observaciones||'—')+'</td>'
-      + '<td><button class="btn btn-danger btn-xs" onclick="eliminarCajaGasto('+r.id+')"><i class="fa-solid fa-trash"></i></button></td>'
-      + '</tr>';
-  }).join('');
 }
 
 function eliminarCajaGasto(id){
@@ -3044,7 +3148,6 @@ function eliminarCajaGasto(id){
     try{
       await apiDelete('/movimientos/'+id);
       toast('Movimiento eliminado','success');
-      await loadCajaGastosList();
       await loadCajaSesion();
       loadEgresosDia();
     }catch(e){ toast('Error: '+e.message,'error'); }
