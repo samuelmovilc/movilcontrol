@@ -2046,6 +2046,13 @@ var fmtCant=function(n){n=+n||0;return (n%1===0)?String(n):n.toLocaleString('es-
 var localDateStr=function(d){d=d||new Date();var tz=d.getTimezoneOffset()*60000;return new Date(d.getTime()-tz).toISOString().slice(0,10)};
 var fmtDate=function(iso){if(!iso)return'';if(iso.includes('/'))return iso;var d=new Date(iso.includes('T')?iso:(iso.includes(' ')?iso.replace(' ','T'):iso+'T12:00:00Z'));if(isNaN(d))return iso;return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 var todayStr=function(){return localDateStr()};
+// Identifica el método de pago "Crédito" (venta financiada, sin dinero recibido hoy).
+// Comparación EXACTA (sin tildes/mayúsculas, recortando espacios) para no confundirlo
+// con métodos como "Tarjeta crédito", que SÍ es dinero real recibido de inmediato —
+// antes se comparaba por substring y "Tarjeta crédito" quedaba excluido por error en
+// selects/totales de toda la app, y hasta hacía que pagar con tarjeta de crédito en
+// el POS se tratara como venta a crédito.
+var esMetodoCredito=function(nombre){return String(nombre||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase()==='credito'};
 
 /* ═══ NAV ═══ */
 function showModule(n){
@@ -2071,7 +2078,7 @@ function showModule(n){
      document.getElementById('fin-date-from').value = todayStr();
      document.getElementById('fin-date-to').value = todayStr();
      var selM = document.getElementById('fin-metodo');
-     selM.innerHTML = (configCache.metodos_pago||[]).filter(function(m){var l=m.toLowerCase();return !l.includes('crédito') && !l.includes('credito');}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
+     selM.innerHTML = (configCache.metodos_pago||[]).filter(function(m){return !esMetodoCredito(m);}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
      loadInforme();
   }
 }
@@ -2277,7 +2284,7 @@ function calcChange(){
 function initPayRows(){document.getElementById('multi-pay-list').innerHTML='';addPayRow()}
 function addPayRow(){
   var mp = Array.isArray(configCache.metodos_pago) ? [...configCache.metodos_pago] : ['Efectivo','Tarjeta débito','Transferencia'];
-  if(!mp.some(m => m.toLowerCase().includes('credito') || m.toLowerCase().includes('crédito'))) mp.push('Crédito');
+  if(!mp.some(esMetodoCredito)) mp.push('Crédito');
   var list=document.getElementById('multi-pay-list');
   var row=document.createElement('div');row.className='multi-pay-row';
   var opts=mp.map(function(m){return'<option>'+m+'</option>'}).join('');
@@ -2461,7 +2468,7 @@ async function processSale(){
   var paga=parseFloat(document.getElementById('paga-con').value)||payRows.reduce(function(s,r){return s+r.monto},0);
   if(paga < total - 0.01){toast('Monto insuficiente. Faltan '+fmt(total-paga),'error');return}
   
-  var isCredito = payRows.some(function(r){var m=String(r.metodo).toLowerCase(); return m.includes('crédito') || m.includes('credito');});
+  var isCredito = payRows.some(function(r){return esMetodoCredito(r.metodo);});
   
   if(isCredito){
      var clienteIdStr = document.getElementById('pos-cliente').value;
@@ -2994,7 +3001,7 @@ async function reimprimirCierre(id){
 function renderMetodosPill(porMetodo){
   porMetodo = porMetodo || {};
   var configurados = (Array.isArray(configCache.metodos_pago) ? configCache.metodos_pago : []).filter(function(m){
-    var l = m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito');
+    return !esMetodoCredito(m);
   });
   var vistos = {};
   var metodos = configurados.concat(Object.keys(porMetodo).filter(function(m){ return configurados.indexOf(m)===-1; }));
@@ -3082,7 +3089,7 @@ function imprimirCierreCaja(s){
   y+=1;
   var porMetodo = s.por_metodo || {};
   var configurados = (Array.isArray(configCache.metodos_pago) ? configCache.metodos_pago : []).filter(function(m){
-    var l = m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito');
+    return !esMetodoCredito(m);
   });
   var vistosM = {};
   configurados.concat(Object.keys(porMetodo).filter(function(m){ return configurados.indexOf(m)===-1; }))
@@ -4906,7 +4913,7 @@ async function verDetalleCredito(id) {
     
     // Configurar select de abonos
     var selMetodos = document.getElementById('cartera-abono-metodo');
-    selMetodos.innerHTML = (configCache.metodos_pago||[]).filter(function(m){var l=m.toLowerCase();return !l.includes('crédito') && !l.includes('credito');}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
+    selMetodos.innerHTML = (configCache.metodos_pago||[]).filter(function(m){return !esMetodoCredito(m);}).map(function(m){return '<option value="'+m+'">'+m+'</option>'}).join('');
     
     document.getElementById('cartera-abono-monto').value = '';
     // Historial de abonos
@@ -5234,7 +5241,7 @@ function populateMetodoSelect(selectId){
   var sel = document.getElementById(selectId);
   if(!sel) return;
   var mp = Array.isArray(configCache.metodos_pago)
-    ? configCache.metodos_pago.filter(function(m){ var l=m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito'); })
+    ? configCache.metodos_pago.filter(function(m){ return !esMetodoCredito(m); })
     : ['Efectivo'];
   sel.innerHTML = mp.map(function(m){ return '<option>'+m+'</option>'; }).join('');
 }

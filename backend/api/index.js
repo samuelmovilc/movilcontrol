@@ -510,6 +510,16 @@ app.get('/api/ventas/:folio', tenantAuth, requireModulo('pos','caja'), async (re
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Identifica el método de pago "Crédito" (venta financiada, sin dinero recibido hoy).
+// Comparación EXACTA (sin tildes/mayúsculas, recortando espacios) para no confundirlo
+// con métodos como "Tarjeta crédito", que SÍ es dinero real recibido de inmediato —
+// antes se comparaba por substring y una venta pagada con "Tarjeta crédito" quedaba
+// marcada como venta a crédito por error (bloqueando la venta sin un plan aprobado, y
+// excluyéndola de los totales de caja de "contado").
+function esMetodoCredito(nombre) {
+  return String(nombre || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase() === 'credito';
+}
+
 // POST crear venta
 app.post('/api/ventas', tenantAuth, requireModulo('pos'), requireCajaAbierta, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
@@ -528,8 +538,8 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), requireCajaAbierta, as
     // frontend ya debería mandar algo corto (nombres de método, sin montos).
     const metodoPagoSafe = (metodo_pago || '').toString().substring(0, 50);
 
-    const isCredito = (metodo_pago && (metodo_pago.toLowerCase().includes('crédito') || metodo_pago.toLowerCase().includes('credito')))
-      || (metodos_pago && metodos_pago.some(m => { const l = String(m.metodo).toLowerCase(); return l.includes('crédito') || l.includes('credito'); }));
+    const isCredito = (metodo_pago && esMetodoCredito(metodo_pago))
+      || (metodos_pago && metodos_pago.some(m => esMetodoCredito(m.metodo)));
     const estadoPago = isCredito ? 'credito' : 'contado';
 
     // Si la venta viene de un plan de crédito pre-aprobado (Cartera -> Cargar Cotización),
@@ -609,8 +619,7 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), requireCajaAbierta, as
           // agregaron filas de pago adicionales. Se registra un movimiento por cada método
           // de pago distinto de "Crédito" que venga en la venta, en vez de asumir Efectivo.
           const metodosIniciales = (metodos_pago || []).filter(function(m) {
-            const metodoLower = String(m.metodo || '').toLowerCase();
-            return !metodoLower.includes('crédito') && !metodoLower.includes('credito') && parseFloat(m.monto) > 0;
+            return !esMetodoCredito(m.metodo) && parseFloat(m.monto) > 0;
           });
           if (metodosIniciales.length) {
             for (const m of metodosIniciales) {
