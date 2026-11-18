@@ -688,15 +688,16 @@ app.get('/api/configuracion', tenantAuth, async (req, res) => {
 
 app.put('/api/configuracion/:id', tenantAuth, requireModulo('config'), async (req, res) => {
   try {
-    const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket, mostrar_nombre_tirilla, mostrar_direccion_tirilla, mostrar_telefono_tirilla, pos_atendido_por } = req.body;
+    const { nombre_negocio, direccion, telefono, logo, metodos_pago, mensaje_tirilla, stock_critico, tamano_ticket, mostrar_nombre_tirilla, mostrar_direccion_tirilla, mostrar_telefono_tirilla, pos_atendido_por, comision_solo_servicios } = req.body;
     const flag = (v) => v===undefined || v===null ? true : !!v;
-    // A diferencia de las de arriba (que por defecto son visibles), pos_atendido_por es
-    // exclusiva del módulo Peluquería y debe quedar APAGADA si no se manda explícitamente,
-    // para no activarle el selector del POS a nadie que no lo haya pedido.
+    // A diferencia de las de arriba (que por defecto son visibles), pos_atendido_por y
+    // comision_solo_servicios son exclusivas del módulo Peluquería y deben quedar
+    // APAGADAS si no se mandan explícitamente, para no cambiarle el comportamiento a
+    // nadie que no lo haya pedido.
     const flagOff = (v) => !!v;
     await req.tenantPool.query(
-      'UPDATE configuracion SET nombre_negocio=?,direccion=?,telefono=?,logo=?,metodos_pago=?,mensaje_tirilla=?,stock_critico=?,tamano_ticket=?,mostrar_nombre_tirilla=?,mostrar_direccion_tirilla=?,mostrar_telefono_tirilla=?,pos_atendido_por=? WHERE id=?',
-      [nombre_negocio, direccion, telefono, logo||null, JSON.stringify(metodos_pago||[]), mensaje_tirilla, stock_critico||10, tamano_ticket||'80mm', flag(mostrar_nombre_tirilla), flag(mostrar_direccion_tirilla), flag(mostrar_telefono_tirilla), flagOff(pos_atendido_por), req.params.id]
+      'UPDATE configuracion SET nombre_negocio=?,direccion=?,telefono=?,logo=?,metodos_pago=?,mensaje_tirilla=?,stock_critico=?,tamano_ticket=?,mostrar_nombre_tirilla=?,mostrar_direccion_tirilla=?,mostrar_telefono_tirilla=?,pos_atendido_por=?,comision_solo_servicios=? WHERE id=?',
+      [nombre_negocio, direccion, telefono, logo||null, JSON.stringify(metodos_pago||[]), mensaje_tirilla, stock_critico||10, tamano_ticket||'80mm', flag(mostrar_nombre_tirilla), flag(mostrar_direccion_tirilla), flag(mostrar_telefono_tirilla), flagOff(pos_atendido_por), flagOff(comision_solo_servicios), req.params.id]
     );
     const [rows] = await req.tenantPool.query('SELECT * FROM configuracion WHERE id=?', [req.params.id]);
     res.json(rows[0]);
@@ -1268,24 +1269,64 @@ app.get('/api/tecnicos/:id/liquidacion-detalle', tenantAuth, requireModulo('orde
 // Técnico") para que los números de sastrería que ya están en producción no se
 // toquen ni se mezclen con esto.
 
+// Redondeo a centavos consistente en todo este bloque: así lo que el detalle muestra
+// por venta es exactamente lo mismo que pagos-pos va a sumar y cobrar — nunca hay
+// diferencia de un centavo entre lo que el dueño ve marcado y lo que se liquida.
+function centavos(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+// Si configuracion.comision_solo_servicios está activo, la comisión del técnico se
+// calcula solo sobre la parte de cada venta que es de la categoría "Servicios" (sin
+// tocar los $ vendidos/mostrados, que siguen siendo el total real de la venta). Es un
+// switch en Configuración (apagado por defecto) para que el dueño decida cuándo
+// aplica — "ahora quiero que SOLO para los servicios... esto es lo único que debe
+// reflejarse en las comisiones" vs. poder volver a comisión sobre todo si lo necesita.
+async function getComisionSoloServicios(pool) {
+  try {
+    const [[cfg]] = await pool.query('SELECT comision_solo_servicios FROM configuracion LIMIT 1');
+    return !!(cfg && cfg.comision_solo_servicios);
+  } catch (e) {
+    // Columna todavía no migrada (ALTER TABLE pendiente en este tenant): se comporta
+    // como si el switch estuviera apagado (comisión sobre el total, igual que
+    // siempre) en vez de romper resumen-pos/liquidacion-pos-detalle/pagos-pos.
+    return false;
+  }
+}
+
+// Subquery reutilizable: cuánto de cada venta corresponde a productos de la categoría
+// "Servicios" (comparación sin tildes/mayúsculas ni espacios extra, igual que el resto
+// de comparaciones de texto "sueltas" en esta app).
+const SUBQ_SUBTOTAL_SERVICIOS = `(
+  SELECT SUM(vp.subtotal) FROM venta_productos vp
+  JOIN productos pr ON pr.id = vp.producto_id
+  WHERE vp.venta_id = v.id AND LOWER(TRIM(pr.categoria)) = 'servicios'
+)`;
+
 // Resumen por técnico de lo ganado en ventas del POS, lo pagado y el saldo.
 app.get('/api/tecnicos/resumen-pos', tenantAuth, requireModulo('peluqueria'), async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     const [tecnicos] = await req.tenantPool.query('SELECT * FROM tecnicos ORDER BY nombre ASC');
+    const soloServicios = await getComisionSoloServicios(req.tenantPool);
 
     let ventasSql = `
       SELECT v.tecnico_id, COUNT(*) as cantidad, SUM(v.total) as vendido,
-             SUM(v.total * t.comision_porcentaje / 100) as ganado
+             SUM(COALESCE(${SUBQ_SUBTOTAL_SERVICIOS},0)) as vendido_servicios,
+             t.comision_porcentaje
       FROM ventas v
       JOIN tecnicos t ON t.id = v.tecnico_id
       WHERE v.tecnico_id IS NOT NULL AND v.estado='aceptada'`;
     const vParams = [];
     if (fecha_inicio && fecha_fin) { ventasSql += ' AND v.fecha BETWEEN ? AND ?'; vParams.push(fecha_inicio, fecha_fin); }
-    ventasSql += ' GROUP BY v.tecnico_id';
+    ventasSql += ' GROUP BY v.tecnico_id, t.comision_porcentaje';
     const [ventas] = await req.tenantPool.query(ventasSql, vParams);
     const ventasMap = {};
-    ventas.forEach(v => { ventasMap[v.tecnico_id] = { cantidad: v.cantidad, vendido: parseFloat(v.vendido) || 0, ganado: parseFloat(v.ganado) || 0 }; });
+    ventas.forEach(v => {
+      const vendido = parseFloat(v.vendido) || 0;
+      const vendidoServicios = parseFloat(v.vendido_servicios) || 0;
+      const base = soloServicios ? vendidoServicios : vendido;
+      const pct = parseFloat(v.comision_porcentaje) || 0;
+      ventasMap[v.tecnico_id] = { cantidad: v.cantidad, vendido, ganado: centavos(base * pct / 100) };
+    });
 
     let pagadoSql = `SELECT tecnico_id, SUM(monto) as pagado FROM movimientos_caja
       WHERE tipo='egreso' AND categoria='Comisión POS' AND tecnico_id IS NOT NULL`;
@@ -1311,11 +1352,6 @@ app.get('/api/tecnicos/resumen-pos', tenantAuth, requireModulo('peluqueria'), as
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Redondeo a centavos consistente en todo este bloque: así lo que el detalle muestra
-// por venta es exactamente lo mismo que pagos-pos va a sumar y cobrar — nunca hay
-// diferencia de un centavo entre lo que el dueño ve marcado y lo que se liquida.
-function centavos(n) { return Math.round((Number(n) || 0) * 100) / 100; }
-
 // Detalle de liquidación por técnico: cada venta con su comisión, y si ya está
 // liquidada, a qué pago quedó ligada. A diferencia de antes, esto YA NO se estima
 // por fecha (FIFO): sale de comision_pos_pagos_ventas, que guarda exactamente qué
@@ -1325,10 +1361,12 @@ app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('
     const tecnicoId = req.params.id;
     const [[tec]] = await req.tenantPool.query('SELECT * FROM tecnicos WHERE id=?', [tecnicoId]);
     if (!tec) return res.status(404).json({ error: 'Técnico no encontrado' });
+    const soloServicios = await getComisionSoloServicios(req.tenantPool);
 
     const [ventasRaw] = await req.tenantPool.query(`
-      SELECT v.id as venta_id, v.folio, v.cliente, v.fecha, v.total, t.comision_porcentaje,
-             cpv.pago_id as pago_id
+      SELECT v.id as venta_id, v.folio, v.cliente, v.fecha, v.total,
+             COALESCE(${SUBQ_SUBTOTAL_SERVICIOS},0) as subtotal_servicios,
+             t.comision_porcentaje, cpv.pago_id as pago_id
       FROM ventas v
       JOIN tecnicos t ON t.id = v.tecnico_id
       LEFT JOIN comision_pos_pagos_ventas cpv ON cpv.venta_id = v.id
@@ -1357,16 +1395,21 @@ app.get('/api/tecnicos/:id/liquidacion-pos-detalle', tenantAuth, requireModulo('
       if (pago) pago.ventas_cubiertas.push({ venta_id: v.venta_id, folio: v.folio, comision_monto: centavos(v.comision_monto) });
     });
 
-    const ventas = ventasRaw.map(v => ({
-      venta_id: v.venta_id,
-      folio: v.folio,
-      cliente: v.cliente,
-      fecha: v.fecha,
-      total: v.total,
-      comision_monto: centavos(v.total * v.comision_porcentaje / 100),
-      liquidado: v.pago_id !== null,
-      pago_id: v.pago_id
-    }));
+    const ventas = ventasRaw.map(v => {
+      const subtotalServicios = parseFloat(v.subtotal_servicios) || 0;
+      const base = soloServicios ? subtotalServicios : (parseFloat(v.total) || 0);
+      return {
+        venta_id: v.venta_id,
+        folio: v.folio,
+        cliente: v.cliente,
+        fecha: v.fecha,
+        total: v.total,
+        subtotal_servicios: subtotalServicios,
+        comision_monto: centavos(base * v.comision_porcentaje / 100),
+        liquidado: v.pago_id !== null,
+        pago_id: v.pago_id
+      };
+    });
 
     const totalGanado = ventas.reduce((s, v) => s + v.comision_monto, 0);
     const totalPagado = pagos.reduce((s, p) => s + p.monto, 0);
@@ -1401,6 +1444,7 @@ app.post('/api/tecnicos/:id/pagos-pos', tenantAuth, requireModulo('peluqueria'),
 
     const [[tec]] = await conn.query('SELECT id, comision_porcentaje FROM tecnicos WHERE id=?', [tecnicoId]);
     if (!tec) { conn.release(); return res.status(404).json({ error: 'Técnico no encontrado' }); }
+    const soloServicios = await getComisionSoloServicios(conn);
 
     await conn.beginTransaction();
 
@@ -1408,7 +1452,8 @@ app.post('/api/tecnicos/:id/pagos-pos', tenantAuth, requireModulo('peluqueria'),
     // segundo pago simultáneo sobre las mismas ventas tenga que esperar en vez de
     // leer datos ya obsoletos.
     const [ventas] = await conn.query(
-      `SELECT v.id, v.total, v.tecnico_id, v.estado FROM ventas v WHERE v.id IN (?) FOR UPDATE`,
+      `SELECT v.id, v.total, v.tecnico_id, v.estado, COALESCE(${SUBQ_SUBTOTAL_SERVICIOS},0) as subtotal_servicios
+       FROM ventas v WHERE v.id IN (?) FOR UPDATE`,
       [venta_ids]
     );
     if (ventas.length !== venta_ids.length) {
@@ -1431,7 +1476,10 @@ app.post('/api/tecnicos/:id/pagos-pos', tenantAuth, requireModulo('peluqueria'),
     }
 
     const pct = parseFloat(tec.comision_porcentaje) || 0;
-    const detalle = ventas.map(v => ({ venta_id: v.id, comision_monto: centavos(v.total * pct / 100) }));
+    const detalle = ventas.map(v => {
+      const base = soloServicios ? (parseFloat(v.subtotal_servicios) || 0) : (parseFloat(v.total) || 0);
+      return { venta_id: v.id, comision_monto: centavos(base * pct / 100) };
+    });
     const montoTotal = centavos(detalle.reduce((s, d) => s + d.comision_monto, 0));
     if (montoTotal <= 0) {
       await conn.rollback(); conn.release();
@@ -2156,6 +2204,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         mostrar_direccion_tirilla BOOLEAN DEFAULT TRUE,
         mostrar_telefono_tirilla BOOLEAN DEFAULT TRUE,
         pos_atendido_por BOOLEAN DEFAULT FALSE,
+        comision_solo_servicios BOOLEAN DEFAULT FALSE,
         pin VARCHAR(20) DEFAULT '3195122754',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       );

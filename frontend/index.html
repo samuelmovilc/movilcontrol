@@ -937,6 +937,10 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
         <div class="config-field">
           <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="cfg-pos-atendido-por" style="margin:0"> Habilitar selección de "Atendido por" en el POS (módulo Peluquería)</label>
         </div>
+        <div class="config-field">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="cfg-comision-solo-servicios" style="margin:0"> Comisión de técnicos solo sobre categoría "Servicios" (módulo Peluquería)</label>
+          <p style="font-size:11px;color:var(--text-light);margin:4px 0 0">Si está activo, cuando una venta tenga productos y servicios mezclados, la comisión del técnico se calcula solo sobre la parte de "Servicios". Si está apagado, la comisión sigue siendo sobre el total de la venta (como antes).</p>
+        </div>
         <button class="btn btn-primary" onclick="saveBusinessData()"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
       </div>
     </div>
@@ -1978,7 +1982,7 @@ async function apiDelete(url){
 
 /* ═══ STATE ═══ */
 var productosCache=[];
-var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm',mostrar_nombre_tirilla:true,mostrar_direccion_tirilla:true,mostrar_telefono_tirilla:true,pos_atendido_por:false};
+var configCache={nombreNegocio:'ControlMovil',direccion:'',telefono:'',logo:null,metodos_pago:['Efectivo','Tarjeta débito','Tarjeta crédito','Transferencia','Otro'],mensaje_tirilla:'¡Gracias por su compra!',stock_critico:10,tamano_ticket:'80mm',mostrar_nombre_tirilla:true,mostrar_direccion_tirilla:true,mostrar_telefono_tirilla:true,pos_atendido_por:false,comision_solo_servicios:false};
 // Tenants creados antes de este campo no lo traen de la BD (undefined/null) -> por defecto se sigue mostrando, igual que antes
 function tirillaFlag(v){ return (v===undefined||v===null) ? true : !!Number(v); }
 var configId=1;
@@ -3992,6 +3996,7 @@ function loadConfigUI(){
   document.getElementById('cfg-direccion-tirilla').checked=tirillaFlag(cfg.mostrar_direccion_tirilla);
   document.getElementById('cfg-telefono-tirilla').checked=tirillaFlag(cfg.mostrar_telefono_tirilla);
   document.getElementById('cfg-pos-atendido-por').checked=!!Number(cfg.pos_atendido_por);
+  document.getElementById('cfg-comision-solo-servicios').checked=!!Number(cfg.comision_solo_servicios);
   document.getElementById('cfg-mensaje').value=cfg.mensaje_tirilla||cfg.mensajeTirilla||'';
   document.getElementById('cfg-stock-critico').value=cfg.stock_critico||10;
   document.getElementById('cfg-ticket-size').value=cfg.tamano_ticket||'80mm';
@@ -4123,7 +4128,8 @@ async function saveBusinessData(){
       mostrar_nombre_tirilla:document.getElementById('cfg-nombre-tirilla').checked,
       mostrar_direccion_tirilla:document.getElementById('cfg-direccion-tirilla').checked,
       mostrar_telefono_tirilla:document.getElementById('cfg-telefono-tirilla').checked,
-      pos_atendido_por:document.getElementById('cfg-pos-atendido-por').checked
+      pos_atendido_por:document.getElementById('cfg-pos-atendido-por').checked,
+      comision_solo_servicios:document.getElementById('cfg-comision-solo-servicios').checked
     });
     configCache=updated;
     if(updated.metodos_pago&&typeof updated.metodos_pago==='string')configCache.metodos_pago=JSON.parse(updated.metodos_pago);
@@ -6162,8 +6168,8 @@ function renderPeluqueriaVentasYPagos(det, desde, hasta, estado, modoTodos){
   document.getElementById('pel-todos-nota').style.display = modoTodos ? '' : 'none';
   document.getElementById('pel-sel-bar').style.display = modoTodos ? 'none' : '';
   document.getElementById('pel-ventas-thead').innerHTML = modoTodos
-    ? '<tr><th>Técnico</th><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Comisión</th><th>Estado</th><th></th></tr>'
-    : '<tr><th></th><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Comisión</th><th>Estado</th><th></th></tr>';
+    ? '<tr><th>Técnico</th><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Servicios</th><th>Comisión</th><th>Estado</th><th></th></tr>'
+    : '<tr><th></th><th>Venta</th><th>Cliente</th><th>Fecha</th><th>Total</th><th>Servicios</th><th>Comisión</th><th>Estado</th><th></th></tr>';
   document.getElementById('pel-pagos-thead').innerHTML = modoTodos
     ? '<tr><th>Técnico</th><th>Fecha</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr>'
     : '<tr><th>Fecha</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr>';
@@ -6199,11 +6205,12 @@ function renderPeluqueriaVentasYPagos(det, desde, hasta, estado, modoTodos){
       + '<td>'+(v.cliente||'—')+'</td>'
       + '<td>'+fmtDate(v.fecha)+'</td>'
       + '<td>'+fmt(v.total)+'</td>'
+      + '<td>'+fmt(v.subtotal_servicios)+'</td>'
       + '<td>'+fmt(v.comision_monto)+'</td>'
       + '<td>'+estadoHtml+'</td>'
       + '<td>'+accion+'</td>'
       + '</tr>';
-  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-light);padding:8px">Sin ventas con este filtro.</td></tr>';
+  }).join('') : '<tr><td colspan="9" style="text-align:center;color:var(--text-light);padding:8px">Sin ventas con este filtro.</td></tr>';
   if(!modoTodos) actualizarPelSeleccionUI();
 
   var pagosFiltrados = det.pagos.filter(function(p){
