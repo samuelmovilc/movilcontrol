@@ -86,6 +86,77 @@ function requireOwner(req, res, next) {
   next();
 }
 
+// Exige que exista una sesión de caja ABIERTA para poder vender, anular una venta,
+// registrar un gasto, o registrar un abono a crédito. Si no hay caja abierta, se
+// rechaza la operación con 409 (no 500: no es un error del servidor, es una regla
+// de negocio). Deja la sesión abierta en req.cajaSesion para que el handler no
+// tenga que volver a consultarla (ej. para grabar caja_sesion_id en el INSERT).
+async function requireCajaAbierta(req, res, next) {
+  try {
+    const [rows] = await req.tenantPool.query("SELECT * FROM caja_sesiones WHERE estado='abierta' ORDER BY id DESC LIMIT 1");
+    if (!rows.length) {
+      return res.status(409).json({ error: 'No hay una caja abierta. Debes abrir la caja antes de continuar.' });
+    }
+    req.cajaSesion = rows[0];
+    next();
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+}
+
+// Suma, a partir de ventas de contado + movimientos de ingreso/egreso ligados a una
+// sesión de caja, los totales en vivo de esa sesión: ventas (con desglose por método),
+// ingresos por abonos (crédito/orden de servicio), egresos, y el total en caja por
+// método de pago (saldo de apertura + lo que entró - lo que salió).
+async function calcularTotalesCaja(pool, cajaSesionId, saldoApertura) {
+  const [ventas] = await pool.query(
+    "SELECT metodos_pago, metodo_pago, total, cambio FROM ventas WHERE caja_sesion_id=? AND estado='aceptada' AND estado_pago='contado'",
+    [cajaSesionId]
+  );
+  let ventasTotal = 0;
+  let ventasCantidad = ventas.length;
+  const porMetodo = {};
+  const sumar = (metodo, monto) => { porMetodo[metodo] = (porMetodo[metodo] || 0) + monto; };
+  for (const v of ventas) {
+    ventasTotal += parseFloat(v.total) || 0;
+    let mp = typeof v.metodos_pago === 'string' ? JSON.parse(v.metodos_pago || '[]') : (v.metodos_pago || []);
+    if (mp && mp.length) {
+      mp.forEach(m => sumar(m.metodo || 'Otro', parseFloat(m.monto) || 0));
+      if (parseFloat(v.cambio) > 0) sumar('Efectivo', -parseFloat(v.cambio));
+    } else {
+      sumar(v.metodo_pago || 'Efectivo', parseFloat(v.total) || 0);
+    }
+  }
+
+  const [movs] = await pool.query(
+    "SELECT tipo, metodo_pago, SUM(monto) as total FROM movimientos_caja WHERE caja_sesion_id=? GROUP BY tipo, metodo_pago",
+    [cajaSesionId]
+  );
+  let ingresosOtros = 0, egresosTotal = 0;
+  for (const m of movs) {
+    const monto = parseFloat(m.total) || 0;
+    const metodo = m.metodo_pago || 'Efectivo';
+    if (m.tipo === 'ingreso') { ingresosOtros += monto; sumar(metodo, monto); }
+    else if (m.tipo === 'egreso') { egresosTotal += monto; sumar(metodo, -monto); }
+  }
+
+  // El saldo de apertura se asume en efectivo (es lo normal: se abre la caja con un
+  // fondo de cambio en efectivo).
+  sumar('Efectivo', parseFloat(saldoApertura) || 0);
+
+  const totalCaja = Object.values(porMetodo).reduce((s, v) => s + v, 0);
+
+  return {
+    saldo_apertura: parseFloat(saldoApertura) || 0,
+    ventas_total: ventasTotal,
+    ventas_cantidad: ventasCantidad,
+    ingresos_otros_total: ingresosOtros,
+    egresos_total: egresosTotal,
+    total_caja: totalCaja,
+    por_metodo: porMetodo
+  };
+}
+
 
 // ── MIDDLEWARE ──
 app.use(express.json({ limit: '10mb' }));
@@ -440,7 +511,7 @@ app.get('/api/ventas/:folio', tenantAuth, requireModulo('pos','caja'), async (re
 });
 
 // POST crear venta
-app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
+app.post('/api/ventas', tenantAuth, requireModulo('pos'), requireCajaAbierta, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -486,8 +557,8 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
     // tecnico_id es exclusivo del módulo Peluquería (quién atendió la venta); opcional,
     // NULL si no se manda (tiendas y demás negocios que no usan esto no se ven afectados).
     const [result] = await conn.query(
-      'INSERT INTO ventas (folio,fecha,hora,cliente,cliente_id,observaciones,metodo_pago,metodos_pago,total,cambio,estado,estado_pago,tecnico_id) VALUES (?,?,?,?,?,?,?,?,?,?,"aceptada",?,?)',
-      [folio, fecha, hora, clienteStr, clienteId, observaciones||'', metodoPagoSafe, JSON.stringify(metodos_pago||[]), total, cambio||0, estadoPago, tecnico_id || null]
+      'INSERT INTO ventas (folio,fecha,hora,cliente,cliente_id,observaciones,metodo_pago,metodos_pago,total,cambio,estado,estado_pago,tecnico_id,caja_sesion_id) VALUES (?,?,?,?,?,?,?,?,?,?,"aceptada",?,?,?)',
+      [folio, fecha, hora, clienteStr, clienteId, observaciones||'', metodoPagoSafe, JSON.stringify(metodos_pago||[]), total, cambio||0, estadoPago, tecnico_id || null, req.cajaSesion.id]
     );
     const ventaId = result.insertId;
     // Insertar detalle + descontar stock
@@ -543,14 +614,14 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
           });
           if (metodosIniciales.length) {
             for (const m of metodosIniciales) {
-              await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?)',
-                [parseFloat(m.monto), m.metodo || 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId]);
+              await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id, caja_sesion_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?, ?)',
+                [parseFloat(m.monto), m.metodo || 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId, req.cajaSesion.id]);
             }
           } else {
             // Respaldo: si no vino el detalle de métodos, se registra igual para no perder
             // el abono de la cartera, asumiendo Efectivo como antes.
-            await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?)',
-              [plan.inicial, 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId]);
+            await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id, caja_sesion_id) VALUES ("ingreso", "Abono Inicial", ?, ?, ?, ?, ?, ?)',
+              [plan.inicial, 'Efectivo', 'Abono inicial venta ' + folio, clienteId, planId, req.cajaSesion.id]);
           }
         }
       }
@@ -567,7 +638,7 @@ app.post('/api/ventas', tenantAuth, requireModulo('pos'), async (req, res) => {
 });
 
 // PATCH anular venta
-app.patch('/api/ventas/:folio/anular', tenantAuth, requireModulo('pos','caja'), async (req, res) => {
+app.patch('/api/ventas/:folio/anular', tenantAuth, requireModulo('pos','caja'), requireCajaAbierta, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -847,7 +918,7 @@ async function recalcularEstadoCredito(conn, creditoId) {
   return { ...cred, estado: nuevoEstado };
 }
 
-app.post('/api/creditos/:id/abonos', tenantAuth, requireModulo('cartera'), async (req, res) => {
+app.post('/api/creditos/:id/abonos', tenantAuth, requireModulo('cartera'), requireCajaAbierta, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -883,8 +954,8 @@ app.post('/api/creditos/:id/abonos', tenantAuth, requireModulo('cartera'), async
     }
 
     // Registrar en caja
-    const [insertResult] = await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id) VALUES ("ingreso", "Abono Crédito", ?, ?, ?, ?, ?)',
-      [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || 'Abono a crédito', cred.cliente_id, creditoId]);
+    const [insertResult] = await conn.query('INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id, caja_sesion_id) VALUES ("ingreso", "Abono Crédito", ?, ?, ?, ?, ?, ?)',
+      [parseFloat(monto), metodo_pago || 'Efectivo', observaciones || 'Abono a crédito', cred.cliente_id, creditoId, req.cajaSesion.id]);
 
     // Verificar si se pagó todo
     const credActualizado = await recalcularEstadoCredito(conn, creditoId);
@@ -1679,31 +1750,129 @@ app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), asyn
 });
 
 // ════════════════════════════════
+// CAJA — APERTURA / CIERRE DE SESIÓN
+// ════════════════════════════════
+
+// Sesión abierta en este momento (o null) + totales en vivo. El frontend llama esto
+// al entrar al módulo Caja, al abrir el POS, y antes de vender/anular, para saber si
+// hay que bloquear la acción o mostrar el dashboard.
+app.get('/api/caja/sesion-actual', tenantAuth, requireModulo('pos','caja'), async (req, res) => {
+  try {
+    const [rows] = await req.tenantPool.query("SELECT * FROM caja_sesiones WHERE estado='abierta' ORDER BY id DESC LIMIT 1");
+    if (!rows.length) return res.json({ abierta: false });
+    const sesion = rows[0];
+    const totales = await calcularTotalesCaja(req.tenantPool, sesion.id, sesion.saldo_apertura);
+    res.json(Object.assign({ abierta: true }, sesion, totales));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/caja/abrir', tenantAuth, requireModulo('caja'), async (req, res) => {
+  try {
+    const { saldo_apertura, observaciones } = req.body;
+    if (saldo_apertura == null || parseFloat(saldo_apertura) < 0) return res.status(400).json({ error: 'Indica el saldo de apertura' });
+    const [abiertas] = await req.tenantPool.query("SELECT id FROM caja_sesiones WHERE estado='abierta' LIMIT 1");
+    if (abiertas.length) return res.status(409).json({ error: 'Ya hay una caja abierta' });
+    const now = new Date();
+    const fecha = now.toISOString().slice(0,10);
+    const hora = now.toTimeString().slice(0,8);
+    const [result] = await req.tenantPool.query(
+      "INSERT INTO caja_sesiones (fecha_apertura, hora_apertura, saldo_apertura, estado, observaciones) VALUES (?,?,?,'abierta',?)",
+      [fecha, hora, parseFloat(saldo_apertura), observaciones || null]
+    );
+    const [rows] = await req.tenantPool.query('SELECT * FROM caja_sesiones WHERE id=?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/caja/cerrar', tenantAuth, requireModulo('caja'), async (req, res) => {
+  try {
+    const [rows] = await req.tenantPool.query("SELECT * FROM caja_sesiones WHERE estado='abierta' ORDER BY id DESC LIMIT 1");
+    if (!rows.length) return res.status(409).json({ error: 'No hay una caja abierta' });
+    const sesion = rows[0];
+    const totales = await calcularTotalesCaja(req.tenantPool, sesion.id, sesion.saldo_apertura);
+    const now = new Date();
+    const observaciones = req.body && req.body.observaciones ? req.body.observaciones : sesion.observaciones;
+    await req.tenantPool.query(
+      `UPDATE caja_sesiones SET estado='cerrada', fecha_cierre=?, hora_cierre=?,
+         total_ventas=?, total_ingresos_otros=?, total_egresos=?, total_caja=?,
+         desglose_metodos=?, observaciones=? WHERE id=?`,
+      [now.toISOString().slice(0,10), now.toTimeString().slice(0,8),
+       totales.ventas_total, totales.ingresos_otros_total, totales.egresos_total, totales.total_caja,
+       JSON.stringify(totales.por_metodo), observaciones, sesion.id]
+    );
+    const [rows2] = await req.tenantPool.query('SELECT * FROM caja_sesiones WHERE id=?', [sesion.id]);
+    res.json(Object.assign({}, rows2[0], totales));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Historial de sesiones (para auditoría — ver turnos pasados).
+app.get('/api/caja/sesiones', tenantAuth, requireModulo('caja'), async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    let sql = 'SELECT * FROM caja_sesiones WHERE 1=1';
+    const params = [];
+    if (fecha_inicio && fecha_fin) { sql += ' AND fecha_apertura BETWEEN ? AND ?'; params.push(fecha_inicio, fecha_fin); }
+    sql += ' ORDER BY id DESC';
+    const [rows] = await req.tenantPool.query(sql, params);
+    res.json(rows.map(r => Object.assign({}, r, { desglose_metodos: typeof r.desglose_metodos === 'string' ? JSON.parse(r.desglose_metodos || '{}') : (r.desglose_metodos || {}) })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Detalle de una sesión (cerrada o abierta) — ventas + movimientos de ese turno,
+// para poder reimprimir un cierre pasado o auditar un turno puntual.
+app.get('/api/caja/sesiones/:id', tenantAuth, requireModulo('caja'), async (req, res) => {
+  try {
+    const [rows] = await req.tenantPool.query('SELECT * FROM caja_sesiones WHERE id=?', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrada' });
+    const sesion = rows[0];
+    const totales = sesion.estado === 'abierta'
+      ? await calcularTotalesCaja(req.tenantPool, sesion.id, sesion.saldo_apertura)
+      : { saldo_apertura: parseFloat(sesion.saldo_apertura)||0, ventas_total: parseFloat(sesion.total_ventas)||0, ingresos_otros_total: parseFloat(sesion.total_ingresos_otros)||0, egresos_total: parseFloat(sesion.total_egresos)||0, total_caja: parseFloat(sesion.total_caja)||0, por_metodo: typeof sesion.desglose_metodos === 'string' ? JSON.parse(sesion.desglose_metodos || '{}') : (sesion.desglose_metodos || {}) };
+    const [ventas] = await req.tenantPool.query("SELECT * FROM ventas WHERE caja_sesion_id=? ORDER BY id ASC", [req.params.id]);
+    const [movimientos] = await req.tenantPool.query("SELECT * FROM movimientos_caja WHERE caja_sesion_id=? ORDER BY id ASC", [req.params.id]);
+    res.json(Object.assign({}, sesion, totales, { ventas, movimientos }));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════
 // MOVIMIENTOS E INFORME
 // ════════════════════════════════
-app.post('/api/movimientos', tenantAuth, requireModulo('egresos'), async (req, res) => {
+app.post('/api/movimientos', tenantAuth, requireModulo('egresos'), requireCajaAbierta, async (req, res) => {
   try {
     const { tipo, categoria, monto, metodo_pago, observaciones, fecha } = req.body;
     if(!tipo || !categoria || !monto) return res.status(400).json({ error: 'Faltan campos' });
 
     const [result] = await req.tenantPool.query(
-      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, fecha) VALUES (?,?,?,?,?,?)',
-      [tipo, categoria, monto, metodo_pago||'Efectivo', observaciones||'', fecha||null]
+      'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, fecha, caja_sesion_id) VALUES (?,?,?,?,?,?,?)',
+      [tipo, categoria, monto, metodo_pago||'Efectivo', observaciones||'', fecha||null, req.cajaSesion.id]
     );
     res.json({ ok: true, id: result.insertId });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Categorías de gasto ya usadas (para el desplegable de "Otros Egresos" / Caja).
+// No hay tabla de catálogo aparte: se derivan de lo que ya se ha registrado, igual
+// que se hizo con las categorías de productos.
+app.get('/api/movimientos/categorias', tenantAuth, requireModulo('egresos','caja'), async (req, res) => {
+  try {
+    const [rows] = await req.tenantPool.query(
+      "SELECT DISTINCT categoria FROM movimientos_caja WHERE tipo='egreso' AND categoria IS NOT NULL AND categoria NOT IN ('Pago Técnico','Comisión POS') ORDER BY categoria"
+    );
+    res.json(rows.map(r => r.categoria));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Listado de movimientos de caja (usado por "Otros Egresos" para ver los gastos del día,
 // y en general para cualquier ingreso/egreso suelto con filtros de fecha/tipo/categoría).
-app.get('/api/movimientos', tenantAuth, requireModulo('egresos'), async (req, res) => {
+app.get('/api/movimientos', tenantAuth, requireModulo('egresos','caja'), async (req, res) => {
   try {
-    const { fecha_inicio, fecha_fin, tipo, categoria } = req.query;
+    const { fecha_inicio, fecha_fin, tipo, categoria, caja_sesion_id } = req.query;
     let sql = 'SELECT * FROM movimientos_caja WHERE 1=1';
     const params = [];
     if (fecha_inicio && fecha_fin) { sql += ' AND COALESCE(fecha, DATE(created_at)) BETWEEN ? AND ?'; params.push(fecha_inicio, fecha_fin); }
     if (tipo) { sql += ' AND tipo=?'; params.push(tipo); }
     if (categoria) { sql += ' AND categoria=?'; params.push(categoria); }
+    if (caja_sesion_id) { sql += ' AND caja_sesion_id=?'; params.push(parseInt(caja_sesion_id)); }
     sql += ' ORDER BY COALESCE(fecha, DATE(created_at)) DESC, created_at DESC';
     const [rows] = await req.tenantPool.query(sql, params);
     res.json(rows);
@@ -1713,7 +1882,7 @@ app.get('/api/movimientos', tenantAuth, requireModulo('egresos'), async (req, re
 // Borra un movimiento suelto (gasto del día o pago a técnico mal registrado). No se puede
 // borrar por aquí un movimiento que pertenece a un crédito/orden, porque esos ya tienen su
 // propio flujo de edición/eliminación de abonos.
-app.delete('/api/movimientos/:id', tenantAuth, requireModulo('egresos'), async (req, res) => {
+app.delete('/api/movimientos/:id', tenantAuth, requireModulo('egresos','caja'), async (req, res) => {
   try {
     const [[mov]] = await req.tenantPool.query('SELECT * FROM movimientos_caja WHERE id=?', [req.params.id]);
     if (!mov) return res.status(404).json({ error: 'No encontrado' });
@@ -1930,6 +2099,7 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         credito_id INT NULL,
         orden_servicio_id INT NULL,
         tecnico_id VARCHAR(50) NULL,
+        caja_sesion_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS venta_productos (
@@ -1979,6 +2149,23 @@ app.post('/api/saas/tenants', saasAdminAuth, async (req, res) => {
         tecnico_id VARCHAR(50) NULL,
         orden_servicio_id INT NULL,
         fecha DATE NULL,
+        caja_sesion_id INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS caja_sesiones (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        fecha_apertura DATE NOT NULL,
+        hora_apertura TIME NOT NULL,
+        saldo_apertura DECIMAL(10,2) NOT NULL DEFAULT 0,
+        estado ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta',
+        fecha_cierre DATE NULL,
+        hora_cierre TIME NULL,
+        total_ventas DECIMAL(10,2) NULL,
+        total_ingresos_otros DECIMAL(10,2) NULL,
+        total_egresos DECIMAL(10,2) NULL,
+        total_caja DECIMAL(10,2) NULL,
+        desglose_metodos JSON NULL,
+        observaciones TEXT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS creditos (

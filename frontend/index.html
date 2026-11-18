@@ -90,6 +90,9 @@ tbody td{padding:5px 9px}
 .multi-pay-row select{flex:1;padding:3px 6px;border:1.5px solid var(--border);border-radius:3px;font-size:11px;outline:none;background:#fff}
 .multi-pay-row input{width:78px;padding:3px 6px;border:1.5px solid var(--border);border-radius:3px;font-size:11px;text-align:right;outline:none;background:#fff}
 .caja-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.caja-dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px}
+.metodo-pill{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:7px 16px;font-size:12.5px;font-weight:700;color:var(--text-mid)}
+.metodo-pill strong{color:var(--electric);margin-left:5px}
 .summary-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);text-align:center}
 .summary-card .s-label{font-size:10.5px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .summary-card .s-value{font-size:22px;font-weight:800;color:var(--electric)}
@@ -718,7 +721,42 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 
 <!-- CAJA -->
 <div id="module-caja" class="module">
-  <h2 class="section-title"><i class="fa-solid fa-coins"></i> Caja — Historial de ventas</h2>
+  <h2 class="section-title"><i class="fa-solid fa-coins"></i> Caja</h2>
+
+  <!-- Caja CERRADA -->
+  <div class="card" id="caja-cerrada-box" style="display:none;text-align:center;padding:40px 20px">
+    <i class="fa-solid fa-lock" style="font-size:38px;color:var(--red);margin-bottom:10px;display:block"></i>
+    <h3 style="margin:0 0 6px">Caja cerrada</h3>
+    <p style="color:var(--text-light);margin:0 0 16px;font-size:13px">No se pueden registrar ventas, anulaciones, gastos ni abonos hasta abrir la caja.</p>
+    <button class="btn btn-primary" onclick="openModal('modal-abrir-caja')"><i class="fa-solid fa-lock-open"></i> Abrir Caja</button>
+  </div>
+
+  <!-- Caja ABIERTA -->
+  <div id="caja-abierta-box" style="display:none">
+    <div class="card" style="padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12.5px;color:var(--text-mid)"><i class="fa-solid fa-circle" style="color:var(--green);font-size:8px"></i> Caja abierta desde <strong id="caja-hora-apertura">—</strong></div>
+      <button class="btn btn-danger btn-sm" onclick="confirmarCerrarCaja()"><i class="fa-solid fa-lock"></i> Cerrar Caja</button>
+    </div>
+
+    <div class="caja-dashboard">
+      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-sack-dollar"></i> Saldo apertura</div><div class="s-value" id="dash-apertura">$0.00</div></div>
+      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-cart-shopping"></i> Ventas (<span id="dash-ventas-count">0</span>)</div><div class="s-value green" id="dash-ventas">$0.00</div></div>
+      <div class="summary-card"><div class="s-label"><i class="fa-solid fa-hand-holding-dollar"></i> Abonos recibidos</div><div class="s-value" id="dash-abonos">$0.00</div></div>
+      <div class="summary-card" style="cursor:pointer" onclick="abrirModalCajaGastos()" title="Ver detalle de gastos">
+        <div class="s-label"><i class="fa-solid fa-receipt"></i> Egresos / Gastos</div>
+        <div class="s-value" style="color:var(--red)" id="dash-egresos">$0.00</div>
+        <div style="font-size:10.5px;margin-top:4px;color:var(--electric);font-weight:700"><i class="fa-solid fa-file-excel"></i> Ver detalle</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div class="card-header"><i class="fa-solid fa-vault"></i> Total en caja</div>
+      <div style="font-size:30px;font-weight:800;color:var(--electric);text-align:center;margin:10px 0" id="dash-total-caja">$0.00</div>
+      <div id="dash-total-por-metodo" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center"></div>
+    </div>
+  </div>
+
+  <h2 class="section-title" style="margin-top:22px"><i class="fa-solid fa-clock-rotate-left"></i> Historial de ventas</h2>
   <div class="caja-summary">
     <div class="summary-card"><div class="s-label"><i class="fa-solid fa-money-bill-wave"></i> Total vendido</div><div class="s-value" id="sum-total">$0.00</div></div>
     <div class="summary-card"><div class="s-label"><i class="fa-solid fa-chart-line"></i> Utilidad bruta</div><div class="s-value green" id="sum-utilidad">$0.00</div></div>
@@ -1054,7 +1092,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
   <div class="card" style="grid-column:1/-1">
     <div class="card-header"><i class="fa-solid fa-receipt"></i> Gastos del día</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:10px 0">
-      <div class="form-group"><label>Categoría</label><input type="text" id="egreso-categoria" placeholder="Arriendo, servicios..."></div>
+      <div class="form-group"><label>Categoría</label>
+        <div style="display:flex;gap:4px">
+          <select id="egreso-categoria" style="flex:1"><option value="">— Selecciona —</option></select>
+          <button type="button" class="btn btn-secondary btn-xs" onclick="nuevaCategoriaGasto('egreso-categoria')" title="Nueva categoría"><i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
       <div class="form-group"><label>Monto</label><input type="number" id="egreso-monto" placeholder="0" min="0" step="0.01"></div>
       <div class="form-group"><label>Método</label><select id="egreso-metodo"></select></div>
       <div class="form-group"><label>Fecha</label><input type="date" id="egreso-fecha"></div>
@@ -1329,6 +1372,45 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="saveStock()"><i class="fa-solid fa-check"></i> Guardar</button>
       <button class="btn btn-secondary" onclick="closeModal('modal-stock')">Cancelar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-abrir-caja">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header"><span><i class="fa-solid fa-lock-open"></i> Abrir Caja</span><button class="modal-close" onclick="closeModal('modal-abrir-caja')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Saldo de apertura (base en efectivo) *</label><input type="number" id="abrir-caja-saldo" min="0" step="0.01" placeholder="0.00" style="font-size:17px;font-weight:700;text-align:center"></div>
+      <div class="form-group"><label>Observaciones</label><input type="text" id="abrir-caja-obs" placeholder="Opcional"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="abrirCaja()"><i class="fa-solid fa-lock-open"></i> Abrir Caja</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-abrir-caja')">Cancelar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-caja-gastos">
+  <div class="modal" style="max-width:660px">
+    <div class="modal-header"><span><i class="fa-solid fa-receipt"></i> Egresos / Gastos de la caja</span><button class="modal-close" onclick="closeModal('modal-caja-gastos')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:6px">
+        <div class="form-group"><label>Categoría</label>
+          <div style="display:flex;gap:4px">
+            <select id="caja-gasto-categoria" style="flex:1"><option value="">— Selecciona —</option></select>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="nuevaCategoriaGasto('caja-gasto-categoria')" title="Nueva categoría"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="form-group"><label>Monto</label><input type="number" id="caja-gasto-monto" min="0" step="0.01" placeholder="0"></div>
+        <div class="form-group"><label>Método</label><select id="caja-gasto-metodo"></select></div>
+        <div class="form-group" style="grid-column:1/-1"><label>Observaciones</label><input type="text" id="caja-gasto-obs" placeholder="Opcional"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="registrarCajaGasto()"><i class="fa-solid fa-floppy-disk"></i> Registrar Gasto</button>
+      <div class="tbl-wrap" style="margin-top:14px;max-height:280px">
+        <table style="font-size:12px">
+          <thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Método</th><th>Obs.</th><th></th></tr></thead>
+          <tbody id="caja-gastos-body"></tbody>
+        </table>
+      </div>
+      <div style="text-align:right;margin-top:8px;font-weight:700;font-size:13px">Total gastos de este turno: <span id="caja-gastos-total" style="color:var(--red)">$0.00</span></div>
     </div>
   </div>
 </div>
@@ -1867,6 +1949,7 @@ async function initApp(){
   document.getElementById('caja-date-from').value=todayStr();
   document.getElementById('caja-date-to').value=todayStr();
   loadCajaVentas();
+  await loadCajaSesion();
   initPayRows();
   hideLoading();
   document.querySelectorAll('.modal-overlay').forEach(function(ov){ov.addEventListener('click',function(e){if(e.target===ov)closeModal(ov.id)})});
@@ -1912,13 +1995,14 @@ function showModule(n){
   document.getElementById('module-'+n).classList.add('active');
   document.getElementById('tab-'+n).classList.add('active');
   if(n==='productos'){loadProductos().then(function(){renderProductsTable();renderStats()})}
-  if(n==='caja')loadCajaVentas();
+  if(n==='caja'){loadCajaVentas();loadCajaSesion();}
   if(n==='config')loadConfigUI();
   if(n==='cartera')loadCartera();
   if(n==='ordenes')loadOrdenes();
   if(n==='egresos'){
     document.getElementById('egreso-fecha').value = todayStr();
     populateMetodoSelect('egreso-metodo');
+    loadCategoriasGasto();
     loadEgresosDia();
     loadTecnicosResumen();
   }
@@ -2304,7 +2388,8 @@ async function cargarCotizacionAlPOS(planId) {
 async function processSale(){
   var planCotizadoId = null;
   if(!cart.length){toast('Agrega productos al carrito','error');return}
-  
+  if(!(await cajaEstaAbierta())){toast('No hay una caja abierta. Abre la caja en el módulo Caja antes de vender.','error');return}
+
   var sinStock = cart.filter(function(c) { return typeof c.stock === 'number' && c.cant > c.stock; });
   if (sinStock.length > 0) {
     toast('Stock insuficiente para: ' + sinStock.map(function(c){return c.nombre}).join(', '), 'error');
@@ -2717,13 +2802,264 @@ async function loadCajaVentas(){
 }
 function toggleCajaSelect(checked){document.querySelectorAll('.caja-chk').forEach(function(c){c.checked=checked})}
 
+/* ═══ CAJA: apertura / cierre de turno ═══ */
+var cajaSesionActual = {abierta:false};
+
+async function loadCajaSesion(){
+  try{
+    cajaSesionActual = await apiGet('/caja/sesion-actual');
+  }catch(e){
+    cajaSesionActual = {abierta:false};
+  }
+  renderCajaDashboard();
+}
+
+// Refresca el estado de caja contra el servidor y devuelve si hay una caja abierta
+// ahora mismo. Se usa justo antes de vender/anular/registrar gasto o abono, para no
+// confiar en un estado que pudo quedar desactualizado (ej. otro usuario cerró la caja).
+async function cajaEstaAbierta(){
+  await loadCajaSesion();
+  return !!(cajaSesionActual && cajaSesionActual.abierta);
+}
+
+function renderCajaDashboard(){
+  var cerradaBox = document.getElementById('caja-cerrada-box');
+  var abiertaBox = document.getElementById('caja-abierta-box');
+  if(!cerradaBox || !abiertaBox) return; // por si se llama antes de que el DOM del módulo exista
+  if(!cajaSesionActual || !cajaSesionActual.abierta){
+    cerradaBox.style.display='block';
+    abiertaBox.style.display='none';
+    return;
+  }
+  cerradaBox.style.display='none';
+  abiertaBox.style.display='block';
+  var s = cajaSesionActual;
+  document.getElementById('caja-hora-apertura').textContent = (s.hora_apertura||'').slice(0,5);
+  document.getElementById('dash-apertura').textContent = fmt(s.saldo_apertura);
+  document.getElementById('dash-ventas-count').textContent = s.ventas_cantidad||0;
+  document.getElementById('dash-ventas').textContent = fmt(s.ventas_total);
+  document.getElementById('dash-abonos').textContent = fmt(s.ingresos_otros_total);
+  document.getElementById('dash-egresos').textContent = fmt(s.egresos_total);
+  document.getElementById('dash-total-caja').textContent = fmt(s.total_caja);
+  document.getElementById('dash-total-por-metodo').innerHTML = renderMetodosPill(s.por_metodo || {});
+}
+
+// Muestra siempre todos los métodos configurados en Configuración (aunque estén en
+// $0, para que no parezca que falta uno), más cualquier método adicional que haya
+// tenido movimiento pero no esté en la lista configurada (caso raro, por si acaso).
+function renderMetodosPill(porMetodo){
+  porMetodo = porMetodo || {};
+  var configurados = (Array.isArray(configCache.metodos_pago) ? configCache.metodos_pago : []).filter(function(m){
+    var l = m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito');
+  });
+  var vistos = {};
+  var metodos = configurados.concat(Object.keys(porMetodo).filter(function(m){ return configurados.indexOf(m)===-1; }));
+  var html = metodos.filter(function(m){ if(vistos[m]) return false; vistos[m]=true; return true; }).map(function(m){
+    return '<span class="metodo-pill">'+m+' <strong>'+fmt(porMetodo[m]||0)+'</strong></span>';
+  }).join('');
+  return html || '<span style="font-size:12px;color:var(--text-light)">Sin métodos de pago configurados</span>';
+}
+
+async function abrirCaja(){
+  var saldo = parseFloat(document.getElementById('abrir-caja-saldo').value);
+  if(isNaN(saldo) || saldo < 0){ toast('Indica el saldo de apertura','error'); return; }
+  var obs = document.getElementById('abrir-caja-obs').value.trim();
+  showLoading('Abriendo caja...');
+  try{
+    await apiPost('/caja/abrir', {saldo_apertura: saldo, observaciones: obs});
+    document.getElementById('abrir-caja-saldo').value='';
+    document.getElementById('abrir-caja-obs').value='';
+    closeModal('modal-abrir-caja');
+    await loadCajaSesion();
+    toast('Caja abierta con '+fmt(saldo),'success');
+  }catch(e){ toast('Error: '+e.message,'error'); }
+  hideLoading();
+}
+
+function confirmarCerrarCaja(){
+  if(!cajaSesionActual || !cajaSesionActual.abierta){ toast('No hay caja abierta','error'); return; }
+  confirmDlg('Cerrar caja','Se cerrará la caja con un total de '+fmt(cajaSesionActual.total_caja)+'. Después de cerrar no se podrá vender, anular, ni registrar gastos o abonos hasta abrir una nueva caja. ¿Continuar?',async function(){
+    showLoading('Cerrando caja...');
+    try{
+      var sesionCerrada = await apiPost('/caja/cerrar', {});
+      toast('Caja cerrada. Total: '+fmt(sesionCerrada.total_caja),'success');
+      imprimirCierreCaja(sesionCerrada);
+      await loadCajaSesion();
+      loadCajaVentas();
+    }catch(e){ toast('Error: '+e.message,'error'); }
+    hideLoading();
+  });
+}
+
+function imprimirCierreCaja(s){
+  var cfg=configCache;
+  var nombre=cfg.nombre_negocio||cfg.nombreNegocio||'ControlMovil';
+  var dir=cfg.direccion||'';
+  var tel=cfg.telefono||'';
+  var jsPDF=window.jspdf?window.jspdf.jsPDF:(window.jsPDF||null);
+  if(!jsPDF){toast('Error: jsPDF no cargó','error');return;}
+
+  var pw=80;var margin=4;var cw=pw-margin*2;
+  var doc=new jsPDF({unit:'mm',format:[pw,297],orientation:'portrait'});
+  var y=margin;var lineH=4.5;
+
+  function al(text,size,bold,center){
+    size=size||8;
+    doc.setFontSize(size);doc.setFont('helvetica','bold');
+    var x=center?(pw-doc.getTextWidth(text))/2:margin;
+    doc.text(text,x,y);y+=lineH*(size/8);
+  }
+  function ar(left,right,size){
+    size=size||8;
+    doc.setFontSize(size);doc.setFont('helvetica','bold');
+    doc.text(left,margin,y);doc.text(right,pw-margin,y,{align:'right'});y+=lineH*(size/8);
+  }
+  function sep(){
+    doc.setLineDashPattern([1,1],0);doc.setDrawColor(0);doc.setLineWidth(0.2);
+    doc.line(margin,y,pw-margin,y);y+=3;
+  }
+
+  if(cfg.logo){try{doc.addImage(cfg.logo,'PNG',(pw-40)/2,y,40,15,undefined,'FAST');y+=17;}catch(e){}}
+  al(nombre,10,true,true);
+  if(dir)al(dir,7,false,true);
+  if(tel)al('Tel: '+tel,7,false,true);
+  y+=1;sep();
+  al('CIERRE DE TURNO DE CAJA',9,true,true);
+  al('Apertura: '+(s.fecha_apertura||'').slice(0,10)+' '+(s.hora_apertura||'').slice(0,5),7,false,true);
+  al('Cierre: '+(s.fecha_cierre||'').slice(0,10)+' '+(s.hora_cierre||'').slice(0,5),7,false,true);
+  y+=1;sep();
+
+  ar('Saldo de apertura',fmt(s.saldo_apertura),8);
+  ar('Ventas ('+(s.ventas_cantidad||0)+')',fmt(s.ventas_total),8);
+  ar('Abonos recibidos',fmt(s.ingresos_otros_total),8);
+  ar('Egresos / Gastos','-'+fmt(s.egresos_total),8);
+  y+=1;sep();
+  al('DESGLOSE POR MÉTODO DE PAGO',8,true,true);
+  y+=1;
+  var porMetodo = s.por_metodo || {};
+  var configurados = (Array.isArray(configCache.metodos_pago) ? configCache.metodos_pago : []).filter(function(m){
+    var l = m.toLowerCase(); return !l.includes('crédito') && !l.includes('credito');
+  });
+  var vistosM = {};
+  configurados.concat(Object.keys(porMetodo).filter(function(m){ return configurados.indexOf(m)===-1; }))
+    .filter(function(m){ if(vistosM[m]) return false; vistosM[m]=true; return true; })
+    .forEach(function(m){ ar(m,fmt(porMetodo[m]||0),8); });
+  y+=1;sep();
+  ar('TOTAL EN CAJA',fmt(s.total_caja),10);
+  y+=1;sep();
+  if(s.observaciones) al('Obs: '+s.observaciones,7,false,false);
+
+  doc.save('CIERRE_CAJA_'+(s.fecha_cierre||'').slice(0,10)+'_'+s.id+'.pdf');
+}
+
+/* ═══ CAJA: gastos del turno (con categoría libre + botón crear) ═══ */
+var _categoriasGastoCache = [];
+
+async function loadCategoriasGasto(){
+  try{ _categoriasGastoCache = await apiGet('/movimientos/categorias'); }catch(e){ _categoriasGastoCache = []; }
+  fillCategoriaSelect('caja-gasto-categoria');
+  fillCategoriaSelect('egreso-categoria');
+}
+function fillCategoriaSelect(selectId){
+  var sel = document.getElementById(selectId);
+  if(!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— Selecciona —</option>' + _categoriasGastoCache.map(function(c){return '<option value="'+c+'">'+c+'</option>'}).join('');
+  if(_categoriasGastoCache.indexOf(cur)!==-1) sel.value = cur;
+}
+function nuevaCategoriaGasto(selectId){
+  var nombre = prompt('Nombre de la nueva categoría de gasto:');
+  if(!nombre) return;
+  nombre = nombre.trim();
+  if(!nombre) return;
+  if(_categoriasGastoCache.indexOf(nombre)===-1) _categoriasGastoCache.push(nombre);
+  ['caja-gasto-categoria','egreso-categoria'].forEach(function(id){ fillCategoriaSelect(id); });
+  var target = document.getElementById(selectId);
+  if(target) target.value = nombre;
+}
+
+async function abrirModalCajaGastos(){
+  if(!cajaSesionActual || !cajaSesionActual.abierta){ toast('No hay caja abierta','error'); return; }
+  populateMetodoSelect('caja-gasto-metodo');
+  await loadCategoriasGasto();
+  await loadCajaGastosList();
+  openModal('modal-caja-gastos');
+}
+
+async function registrarCajaGasto(){
+  if(!(await cajaEstaAbierta())){ toast('No hay caja abierta','error'); closeModal('modal-caja-gastos'); return; }
+  var categoria = document.getElementById('caja-gasto-categoria').value.trim();
+  var monto = parseFloat(document.getElementById('caja-gasto-monto').value);
+  if(!categoria || !monto || monto<=0){ toast('Indica categoría y un monto válido','error'); return; }
+  var payload = {
+    tipo: 'egreso',
+    categoria: categoria,
+    monto: monto,
+    metodo_pago: document.getElementById('caja-gasto-metodo').value,
+    observaciones: document.getElementById('caja-gasto-obs').value.trim(),
+    fecha: todayStr()
+  };
+  try{
+    await apiPost('/movimientos', payload);
+    toast('Gasto registrado','success');
+    document.getElementById('caja-gasto-monto').value='';
+    document.getElementById('caja-gasto-obs').value='';
+    await loadCajaGastosList();
+    await loadCajaSesion();
+    loadEgresosDia();
+  }catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function loadCajaGastosList(){
+  var body = document.getElementById('caja-gastos-body');
+  if(!cajaSesionActual || !cajaSesionActual.id){
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">Sin caja abierta.</td></tr>';
+    document.getElementById('caja-gastos-total').textContent = fmt(0);
+    return;
+  }
+  var rows;
+  try{ rows = await apiGet('/movimientos?tipo=egreso&caja_sesion_id='+cajaSesionActual.id); }catch(e){ toast('Error cargando gastos: '+e.message,'error'); return; }
+  rows = rows.filter(function(r){ return r.categoria !== 'Pago Técnico' && r.categoria !== 'Comisión POS'; });
+  var total = rows.reduce(function(s,r){return s+parseFloat(r.monto||0)},0);
+  document.getElementById('caja-gastos-total').textContent = fmt(total);
+  if(!rows.length){
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:14px">Sin gastos registrados en este turno.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(function(r){
+    var f = r.fecha || (r.created_at ? String(r.created_at).slice(0,10) : '');
+    return '<tr>'
+      + '<td>'+fmtDate(f)+'</td>'
+      + '<td>'+r.categoria+'</td>'
+      + '<td>'+fmt(r.monto)+'</td>'
+      + '<td>'+(r.metodo_pago||'—')+'</td>'
+      + '<td>'+(r.observaciones||'—')+'</td>'
+      + '<td><button class="btn btn-danger btn-xs" onclick="eliminarCajaGasto('+r.id+')"><i class="fa-solid fa-trash"></i></button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function eliminarCajaGasto(id){
+  confirmDlg('Eliminar gasto', '¿Eliminar este movimiento?', async function(){
+    try{
+      await apiDelete('/movimientos/'+id);
+      toast('Movimiento eliminado','success');
+      await loadCajaGastosList();
+      await loadCajaSesion();
+      loadEgresosDia();
+    }catch(e){ toast('Error: '+e.message,'error'); }
+  });
+}
+
 async function anularVenta(folio){
+  if(!(await cajaEstaAbierta())){ toast('No hay una caja abierta. Debes abrir la caja para poder anular ventas.','error'); return; }
   confirmDlg('Anular venta','Se anulará '+folio+' y se restituirá el stock. ¿Continuar?',async function(){
     showLoading('Anulando venta...');
     try{
       await apiPatch('/ventas/'+folio+'/anular');
       await loadProductos();
       loadCajaVentas();
+      loadCajaSesion();
       toast('Venta '+folio+' anulada y stock restituido','success');
     }catch(e){toast('Error: '+e.message,'error')}
     hideLoading();
@@ -4547,6 +4883,7 @@ async function registrarAbonoCartera() {
   }
 
   var esEdicion = !!editingAbonoId;
+  if(!esEdicion && !(await cajaEstaAbierta())){ toast('No hay una caja abierta. Abre la caja antes de registrar un abono.','error'); return; }
   var titulo = esEdicion ? 'Confirmar edición de abono' : 'Confirmar abono';
   var msg = (esEdicion ? 'Vas a actualizar el abono #' + editingAbonoId + ' a:' : 'Vas a registrar este abono:') +
     '\n\nMonto: ' + fmt(monto) +
@@ -5207,6 +5544,7 @@ async function registrarEgreso(){
   var categoria = document.getElementById('egreso-categoria').value.trim();
   var monto = parseFloat(document.getElementById('egreso-monto').value);
   if(!categoria || !monto || monto<=0){ toast('Indica categoría y un monto válido','error'); return; }
+  if(!(await cajaEstaAbierta())){ toast('No hay una caja abierta. Abre la caja antes de registrar gastos.','error'); return; }
   var payload = {
     tipo: 'egreso',
     categoria: categoria,
