@@ -2689,7 +2689,9 @@ function printTicket(venta){
   addSep();
 
   // Datos de la venta (fecha/folio/cliente) — bloque aparte, alineado a la izquierda
-  addLine(venta.fecha+' '+venta.hora,7,false,false,false,true);
+  // (venta.fecha puede venir como fecha pura o, al recargar desde la BD, como
+  // timestamp ISO completo — fmtFechaCaja() lo deja siempre en dd/mm/aaaa)
+  addLine(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),7,false,false,false,true);
   addLine(venta.folio,8,true,false);
   addLine('Cliente: '+venta.cliente,7,false,false,false,true);
   y+=1;
@@ -2720,7 +2722,7 @@ function printTicket(venta){
     venta.abono_orden_servicio.forEach(function(a){
       addLine('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,true,false);
     });
-    addLine('Pagado al entregar:',7,true,false);
+    addLine('Pagado al entregar ('+fmtFechaCaja(venta.fecha)+'):',7,true,false);
   }
   // Métodos de pago
   if(mp&&mp.length>0){
@@ -2729,7 +2731,9 @@ function printTicket(venta){
     addLine('Pago: '+(venta.metodoPago||''),8,false,false);
   }
   if(venta.cambio>0)addLine('Cambio: '+fmt(venta.cambio),8,false,false);
-  if(venta.observaciones&&venta.observaciones.trim())addLine('Obs: '+venta.observaciones,7,false,false,false,true);
+  // Para ventas que vienen de una orden de sastrería, las observaciones no se
+  // imprimen en la factura (quedan en la remisión de recepción).
+  if(!venta.orden_servicio_id && venta.observaciones&&venta.observaciones.trim())addLine('Obs: '+venta.observaciones,7,false,false,false,true);
 
   y+=1;addSep();
   // Wrapping del mensaje (pie de página, gris y centrado para no competir con el TOTAL)
@@ -2794,7 +2798,7 @@ function printTicket(venta){
   if(tel&&showTel)al('Telefono: '+tel,7,false,false,true);
   y+=1.5;as2();
 
-  al(venta.fecha+' '+venta.hora,7,false,false,true);
+  al(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),7,false,false,true);
   al(venta.folio,8,true,false);
   al('Cliente: '+venta.cliente,7,false,false,true);
   y+=1;as2();
@@ -2814,12 +2818,12 @@ function printTicket(venta){
     venta.abono_orden_servicio.forEach(function(a){
       al('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,true,false);
     });
-    al('Pagado al entregar:',7,true,false);
+    al('Pagado al entregar ('+fmtFechaCaja(venta.fecha)+'):',7,true,false);
   }
   if(mp&&mp.length>0){mp.forEach(function(r){al((r.metodo||'')+': '+fmt(r.monto||0),8,false,false)})}
   else{al('Pago: '+(venta.metodoPago||''),8,false,false)}
   if(venta.cambio>0)al('Cambio: '+fmt(venta.cambio),8,false,false);
-  if(venta.observaciones&&venta.observaciones.trim())al('Obs: '+venta.observaciones,7,false,false,true);
+  if(!venta.orden_servicio_id && venta.observaciones&&venta.observaciones.trim())al('Obs: '+venta.observaciones,7,false,false,true);
   y+=1;as2();
   doc2.setFontSize(7);doc2.setFont('helvetica','bold');doc2.setTextColor(GRAY);
   var ml=doc2.splitTextToSize(msg,cw);
