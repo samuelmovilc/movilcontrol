@@ -1909,6 +1909,11 @@ function checkModules() {
     // y si el elemento no existiera eso rompería silenciosamente ese flujo.
     var cardGastosDia = document.getElementById('card-gastos-dia');
     if (cardGastosDia) cardGastosDia.style.display = 'none';
+    // Con "Gastos del día" oculto, el módulo Egresos queda vacío para sastrería —
+    // se oculta la pestaña completa (igual que arriba: oculta, no borrada del DOM,
+    // para no romper nada que siga apuntando a sus elementos).
+    var elEgresosSastreria = document.getElementById('tab-egresos');
+    if (elEgresosSastreria) elEgresosSastreria.style.display = 'none';
   }
 
   // Peluquería: mismo criterio que Órdenes de Servicio — módulo nuevo y específico
