@@ -506,6 +506,16 @@ app.get('/api/ventas/:folio', tenantAuth, requireModulo('pos','caja'), async (re
     const [prods] = await req.tenantPool.query('SELECT * FROM venta_productos WHERE venta_id=?', [venta.id]);
     venta.productos = prods;
     venta.metodos_pago = typeof venta.metodos_pago === 'string' ? JSON.parse(venta.metodos_pago||'[]') : (venta.metodos_pago||[]);
+    // Si la venta viene de una orden de sastrería (liquidar), adjunta el detalle del
+    // abono que se dejó al recibir la prenda, para que la factura final lo pueda
+    // imprimir desglosado (abono vs. pago de hoy). Solo lectura, no cambia nada más.
+    if (venta.orden_servicio_id) {
+      const [abonos] = await req.tenantPool.query(
+        "SELECT monto, metodo_pago, created_at FROM movimientos_caja WHERE orden_servicio_id=? AND tipo='ingreso' AND categoria='Abono Orden Servicio' ORDER BY id ASC",
+        [venta.orden_servicio_id]
+      );
+      venta.abono_orden_servicio = abonos;
+    }
     res.json(venta);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1607,8 +1617,9 @@ app.get('/api/ordenes/:id', tenantAuth, requireModulo('ordenes'), async (req, re
 });
 
 // Crear orden (recepción de la(s) prenda(s)). Opcionalmente registra el abono que deja
-// el cliente en ese momento.
-app.post('/api/ordenes', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+// el cliente en ese momento. Exige caja abierta siempre (haya abono o no), para que
+// cualquier dinero que entre por una orden quede ligado a un turno de caja.
+app.post('/api/ordenes', tenantAuth, requireModulo('ordenes'), requireCajaAbierta, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1648,14 +1659,14 @@ app.post('/api/ordenes', tenantAuth, requireModulo('ordenes'), async (req, res) 
       if (metodos.length) {
         for (const m of metodos) {
           await conn.query(
-            'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id) VALUES ("ingreso","Abono Orden Servicio",?,?,?,?,?)',
-            [parseFloat(m.monto), m.metodo || 'Efectivo', 'Abono al recibir orden ' + folio, cliente_id, ordenId]
+            'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id, caja_sesion_id) VALUES ("ingreso","Abono Orden Servicio",?,?,?,?,?,?)',
+            [parseFloat(m.monto), m.metodo || 'Efectivo', 'Abono al recibir orden ' + folio, cliente_id, ordenId, req.cajaSesion.id]
           );
         }
       } else {
         await conn.query(
-          'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id) VALUES ("ingreso","Abono Orden Servicio",?,?,?,?,?)',
-          [parseFloat(abono_inicial), 'Efectivo', 'Abono al recibir orden ' + folio, cliente_id, ordenId]
+          'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id, caja_sesion_id) VALUES ("ingreso","Abono Orden Servicio",?,?,?,?,?,?)',
+          [parseFloat(abono_inicial), 'Efectivo', 'Abono al recibir orden ' + folio, cliente_id, ordenId, req.cajaSesion.id]
         );
       }
     }
@@ -1723,9 +1734,12 @@ app.patch('/api/ordenes/:id/anular', tenantAuth, requireModulo('ordenes'), async
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Liquidar / entregar: cobra lo que falte (todo o en parte, financiando el resto igual que
-// un crédito normal) y genera la venta con el folio definitivo de la orden.
-app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), async (req, res) => {
+// Liquidar / entregar: cobra el saldo COMPLETO y genera la venta/factura final con el
+// folio definitivo de la orden. Esta sastrería no maneja crédito/Cartera, así que a
+// diferencia de antes ya NO se financia a cuotas: si queda saldo pendiente, se rechaza
+// con un mensaje claro en vez de crear un crédito. Exige caja abierta, igual que al
+// crear la orden.
+app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), requireCajaAbierta, async (req, res) => {
   const conn = await req.tenantPool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1743,16 +1757,16 @@ app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), asyn
     const abonadoPrevio = parseFloat(abonoRow.total) || 0;
     const total = parseFloat(orden.total);
 
-    const { metodos_pago, folio_venta, fecha, hora, num_cuotas, frecuencia } = req.body;
+    const { metodos_pago, folio_venta, fecha, hora } = req.body;
     const metodosAhora = (metodos_pago || []).filter(m => parseFloat(m.monto) > 0);
     const montoAhora = metodosAhora.reduce((s, m) => s + parseFloat(m.monto), 0);
 
     const totalCobrado = abonadoPrevio + montoAhora;
     const saldoRestante = total - totalCobrado;
 
-    if (saldoRestante > 0.5 && (!num_cuotas || parseInt(num_cuotas) < 1)) {
+    if (saldoRestante > 0.5) {
       await conn.rollback(); conn.release();
-      return res.status(409).json({ error: 'Queda saldo pendiente de $' + saldoRestante.toFixed(2) + '; indica a cuántas cuotas se financia' });
+      return res.status(409).json({ error: 'Falta cobrar $' + saldoRestante.toFixed(2) + ' para poder entregar la prenda. El pago debe quedar completo (no se maneja crédito).' });
     }
 
     const prendasJson = prendas.map(p => ({ id: 'PRENDA-' + p.id, nombre: p.tipo_prenda + (p.descripcion ? ' - ' + p.descripcion : ''), precio: parseFloat(p.precio), cantidad: 1 }));
@@ -1761,35 +1775,13 @@ app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), asyn
     const horaVenta = hora || new Date().toTimeString().slice(0,8);
     const folio = folio_venta || ('VENTA-' + fechaVenta.replace(/-/g,'') + '-ORD' + req.params.id);
 
-    let creditoId = null;
-    const esCredito = saldoRestante > 0.5;
-
-    if (esCredito) {
-      const [credResult] = await conn.query(
-        `INSERT INTO creditos (cliente_id, precio_contado, porcentaje_recargo, total_credito, inicial, num_cuotas, frecuencia, fecha_inicio, estado, productos_cotizados, orden_servicio_id)
-         VALUES (?,?,0,?,?,?,?,?,"activo",?,?)`,
-        [orden.cliente_id, total, total, totalCobrado, parseInt(num_cuotas), frecuencia || 'quincenal', fechaVenta, JSON.stringify(prendasJson), req.params.id]
-      );
-      creditoId = credResult.insertId;
-
-      let valorCuota = saldoRestante / parseInt(num_cuotas);
-      for (let i = 1; i <= parseInt(num_cuotas); i++) {
-        let d = new Date(fechaVenta);
-        if (frecuencia === 'mensual') d.setMonth(d.getMonth() + i);
-        else if (frecuencia === 'semanal') d.setDate(d.getDate() + (i * 7));
-        else d.setDate(d.getDate() + (i * 15));
-        await conn.query('INSERT INTO credito_cuotas (credito_id, numero_cuota, fecha_vence, valor, pagado) VALUES (?,?,?,?,0)',
-          [creditoId, i, d.toISOString().split('T')[0], valorCuota]);
-      }
-    }
-
     const metodosParaVenta = metodosAhora.map(m => ({ metodo: m.metodo, monto: parseFloat(m.monto) }));
-    const metodoPagoStr = metodosParaVenta.map(m => m.metodo).join(' + ') || (esCredito ? 'Crédito' : 'Efectivo');
+    const metodoPagoStr = metodosParaVenta.map(m => m.metodo).join(' + ') || 'Efectivo';
 
     const [ventaResult] = await conn.query(
       `INSERT INTO ventas (folio, fecha, hora, cliente, cliente_id, observaciones, metodo_pago, metodos_pago, total, cambio, estado, estado_pago, credito_id, orden_servicio_id)
-       VALUES (?,?,?,?,?,?,?,?,?,0,"aceptada",?,?,?)`,
-      [folio, fechaVenta, horaVenta, orden.cliente, orden.cliente_id, orden.observaciones || '', metodoPagoStr, JSON.stringify(metodosParaVenta), total, esCredito ? 'credito' : 'contado', creditoId, req.params.id]
+       VALUES (?,?,?,?,?,?,?,?,?,0,"aceptada","contado",NULL,?)`,
+      [folio, fechaVenta, horaVenta, orden.cliente, orden.cliente_id, orden.observaciones || '', metodoPagoStr, JSON.stringify(metodosParaVenta), total, req.params.id]
     );
     const ventaId = ventaResult.insertId;
 
@@ -1798,21 +1790,19 @@ app.post('/api/ordenes/:id/liquidar', tenantAuth, requireModulo('ordenes'), asyn
         [ventaId, p.id, p.nombre, 1, p.precio, p.precio]);
     }
 
-    if (esCredito) {
-      await conn.query('UPDATE creditos SET venta_id=? WHERE id=?', [ventaId, creditoId]);
-    }
-
-    // Registrar el cobro de HOY (el abono previo, si lo hubo, ya quedó registrado al recibir la orden)
+    // Registrar el cobro de HOY, ligado al turno de caja (el abono previo, si lo hubo, ya
+    // quedó registrado — y ligado a su propia caja_sesion — al recibir la orden, así que
+    // esto nunca duplica ese monto: solo registra lo que falta y se cobra justo ahora)
     for (const m of metodosAhora) {
       await conn.query(
-        'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, credito_id, orden_servicio_id) VALUES ("ingreso",?,?,?,?,?,?,?)',
-        [esCredito ? 'Abono Inicial' : 'Pago Orden Servicio', parseFloat(m.monto), m.metodo || 'Efectivo', 'Pago al entregar orden ' + orden.folio, orden.cliente_id, creditoId, req.params.id]
+        'INSERT INTO movimientos_caja (tipo, categoria, monto, metodo_pago, observaciones, cliente_id, orden_servicio_id, caja_sesion_id) VALUES ("ingreso","Pago Orden Servicio",?,?,?,?,?,?)',
+        [parseFloat(m.monto), m.metodo || 'Efectivo', 'Pago al entregar orden ' + orden.folio, orden.cliente_id, req.params.id, req.cajaSesion.id]
       );
     }
 
     await conn.query('UPDATE orden_prendas SET estado="entregada" WHERE orden_id=?', [req.params.id]);
-    await conn.query('UPDATE ordenes_servicio SET estado="terminada", venta_id=?, credito_id=?, fecha_entregado=NOW() WHERE id=?',
-      [ventaId, creditoId, req.params.id]);
+    await conn.query('UPDATE ordenes_servicio SET estado="terminada", venta_id=?, fecha_entregado=NOW() WHERE id=?',
+      [ventaId, req.params.id]);
 
     await conn.commit(); conn.release();
     const ordenFinal = await cargarOrdenCompleta(req.tenantPool, req.params.id);
