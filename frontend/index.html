@@ -2718,7 +2718,7 @@ function printTicket(venta){
   // TOTAL — es solo para que la factura muestre el historial completo del pago).
   if(venta.abono_orden_servicio&&venta.abono_orden_servicio.length){
     venta.abono_orden_servicio.forEach(function(a){
-      addLine('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,false,false,false,true);
+      addLine('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,true,false);
     });
     addLine('Pagado al entregar:',7,true,false);
   }
@@ -2812,7 +2812,7 @@ function printTicket(venta){
   as2Strong();ar('TOTAL',fmt(venta.total),11,true);as2Strong();
   if(venta.abono_orden_servicio&&venta.abono_orden_servicio.length){
     venta.abono_orden_servicio.forEach(function(a){
-      al('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,false,false,true);
+      al('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,true,false);
     });
     al('Pagado al entregar:',7,true,false);
   }
@@ -5667,13 +5667,13 @@ function imprimirRemisionOrden(orden){
       y+=17;
     }
     if(showNombre)al(nombre,10,true,true);
-    if(dir&&showDir)al('Direccion: '+dir,7,false,true,true);
-    if(tel&&showTel)al('Telefono: '+tel,7,false,true,true);
+    if(dir&&showDir)al('Direccion: '+dir,7,false,true);
+    if(tel&&showTel)al('Telefono: '+tel,7,false,true);
     y+=1.5;as();
 
     al('REMISIÓN - RECEPCIÓN DE PRENDA(S)',9,true,true);
     y+=0.5;
-    al((orden.fecha_recibido||'')+(orden.fecha_entrega_estimada?'  ·  Entrega est.: '+orden.fecha_entrega_estimada:''),7,false,false,true);
+    al((orden.fecha_recibido||'')+(orden.fecha_entrega_estimada?'  ·  Entrega est.: '+orden.fecha_entrega_estimada:''),7,false,false);
     al(orden.folio,9,true,false);
     al('Cliente: '+(orden.cliente||''),8,false,false);
     y+=1;as();
@@ -5683,8 +5683,8 @@ function imprimirRemisionOrden(orden){
       doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0);
       var lines=doc.splitTextToSize(np,cw);
       lines.forEach(function(l){al(l,8,false,false)});
-      if(p.observaciones) al('  Obs: '+p.observaciones,7,false,false,true);
-      ar((p.tipo_trabajo||''),fmt(p.precio),8,false,true);
+      if(p.observaciones) al('  Obs: '+p.observaciones,7,false,false);
+      ar((p.tipo_trabajo||''),fmt(p.precio),8,false);
       y+=0.5;
     });
 
@@ -5694,14 +5694,14 @@ function imprimirRemisionOrden(orden){
     if(abonado>0){
       al('Abono recibido hoy: '+fmt(abonado),8,true,false);
     } else {
-      al('Sin abono al recibir',8,false,false,true);
+      al('Sin abono al recibir',8,true,false);
     }
     ar('Saldo pendiente',fmt(orden.saldo),8,true);
 
-    if(orden.observaciones&&orden.observaciones.trim()) al('Obs: '+orden.observaciones,7,false,false,true);
+    if(orden.observaciones&&orden.observaciones.trim()) al('Obs: '+orden.observaciones,7,false,false);
 
     y+=1;as();
-    doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(GRAY);
+    doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(0);
     var ml=doc.splitTextToSize('Conserve este comprobante para reclamar su(s) prenda(s).',cw);
     ml.forEach(function(l){doc.text(l,(pw-doc.getTextWidth(l))/2,y);y+=lineH*(7/8)});
     doc.setTextColor(0);
