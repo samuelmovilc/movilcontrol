@@ -516,6 +516,12 @@ app.get('/api/ventas/:folio', tenantAuth, requireModulo('pos','caja'), async (re
       );
       venta.abono_orden_servicio = abonos;
     }
+    // Solo lectura: teléfono del cliente para que la factura impresa lo muestre junto
+    // al ID y el nombre (que ya venían en la venta misma).
+    if (venta.cliente_id) {
+      const [[cli]] = await req.tenantPool.query('SELECT telefono FROM clientes WHERE id=?', [venta.cliente_id]);
+      venta.cliente_telefono = cli ? cli.telefono : null;
+    }
     res.json(venta);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -1646,6 +1652,12 @@ async function cargarOrdenCompleta(pool, ordenId) {
   );
   orden.abonado = parseFloat(abonos.total) || 0;
   orden.saldo = parseFloat(orden.total) - orden.abonado;
+  // Solo lectura: el teléfono del cliente para que la remisión y el detalle de la
+  // orden lo puedan mostrar junto al ID y el nombre (que ya venían en la orden misma).
+  if (orden.cliente_id) {
+    const [[cli]] = await pool.query('SELECT telefono FROM clientes WHERE id=?', [orden.cliente_id]);
+    orden.cliente_telefono = cli ? cli.telefono : null;
+  }
   return orden;
 }
 
@@ -1688,10 +1700,19 @@ app.get('/api/ordenes', tenantAuth, requireModulo('ordenes'), async (req, res) =
       );
       const abonoMap = {};
       abonos.forEach(a => { abonoMap[a.orden_servicio_id] = parseFloat(a.total) || 0; });
+      // Solo lectura: teléfono del cliente de cada orden (para la remisión, igual que
+      // en cargarOrdenCompleta), agregado en bloque para no hacer una consulta por fila.
+      const clienteIds = [...new Set(ordenes.map(o => o.cliente_id).filter(Boolean))];
+      let telMap = {};
+      if (clienteIds.length) {
+        const [clis] = await req.tenantPool.query('SELECT id, telefono FROM clientes WHERE id IN (?)', [clienteIds]);
+        clis.forEach(c => { telMap[c.id] = c.telefono; });
+      }
       ordenes.forEach(o => {
         o.prendas = porOrden[o.id] || [];
         o.abonado = abonoMap[o.id] || 0;
         o.saldo = parseFloat(o.total) - o.abonado;
+        o.cliente_telefono = telMap[o.cliente_id] || null;
       });
       // Solo para poder mostrar un botón de "Factura" en órdenes terminadas: el folio
       // de la venta que ya se creó al liquidar (no se toca nada de cómo se liquida ni

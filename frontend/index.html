@@ -2164,6 +2164,25 @@ var fmtCant=function(n){n=+n||0;return (n%1===0)?String(n):n.toLocaleString('es-
 var localDateStr=function(d){d=d||new Date();var tz=d.getTimezoneOffset()*60000;return new Date(d.getTime()-tz).toISOString().slice(0,10)};
 var fmtDate=function(iso){if(!iso)return'';if(iso.includes('/'))return iso;var d=new Date(iso.includes('T')?iso:(iso.includes(' ')?iso.replace(' ','T'):iso+'T12:00:00Z'));if(isNaN(d))return iso;return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 var todayStr=function(){return localDateStr()};
+// El campo "cliente" que guardan tanto órdenes como ventas viene como "ID - NOMBRE"
+// (lo arma el selector de cliente). Esto separa el nombre solo, para imprimirlo en su
+// propia línea junto al ID y el teléfono (cada uno por separado) en la remisión y la factura.
+var soloNombreCliente=function(clienteStr,clienteId){
+  clienteStr=String(clienteStr||'');
+  var prefijo=String(clienteId||'')+' - ';
+  return clienteStr.indexOf(prefijo)===0 ? clienteStr.slice(prefijo.length) : clienteStr;
+};
+// Teléfono por cliente_id, para imprimir sin tener que ir siempre al backend: se llena
+// en loadClientesDropdown() (ya se llama al cargar la app). Las órdenes/ventas que SÍ
+// vienen del backend (reimpresión) ya traen su propio cliente_telefono y no usan esto;
+// esto es solo el respaldo para el tiquete recién impreso justo después de vender/crear
+// la orden, cuando todavía no se volvió a consultar al servidor.
+var clientesTelCache={};
+var telefonoCliente=function(obj){
+  if(obj && obj.cliente_telefono) return obj.cliente_telefono;
+  var tel = obj && clientesTelCache[obj.cliente_id];
+  return tel || '—';
+};
 // Identifica el método de pago "Crédito" (venta financiada, sin dinero recibido hoy).
 // Comparación EXACTA (sin tildes/mayúsculas, recortando espacios) para no confundirlo
 // con métodos como "Tarjeta crédito", que SÍ es dinero real recibido de inmediato —
@@ -2654,7 +2673,7 @@ async function processSale(){
       }
 
       var venta=await apiPost('/ventas', body);
-      currentSaleForReprint={folio:folio,fecha:localDateStr(now),hora:now.toTimeString().slice(0,8),cliente:cliente,observaciones:obs,metodoPago:metodosStr,metodosPago:payRows,total:total,cambio:cambio,productos:cart.map(function(c){return Object.assign({},c)})};
+      currentSaleForReprint={folio:folio,fecha:localDateStr(now),hora:now.toTimeString().slice(0,8),cliente:cliente,cliente_id:cliente.split(' - ')[0].trim(),observaciones:obs,metodoPago:metodosStr,metodosPago:payRows,total:total,cambio:cambio,productos:cart.map(function(c){return Object.assign({},c)})};
       printTicket(currentSaleForReprint);
       clearCart();document.getElementById('pos-obs').value='';
       creditoPlanConfirmado = null; // Limpiar plan
@@ -2786,7 +2805,9 @@ function printTicket(venta){
   // timestamp ISO completo — fmtFechaCaja() lo deja siempre en dd/mm/aaaa)
   addLine(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),9,false,false);
   addLine(venta.folio,10,true,false);
-  addLine('Cliente: '+venta.cliente,9,false,false);
+  addLine('ID: '+(venta.cliente_id||''),9,false,false);
+  addLine('Nombre: '+soloNombreCliente(venta.cliente,venta.cliente_id),9,false,false);
+  addLine('Telefono: '+telefonoCliente(venta),9,false,false);
   y+=1;
   addSep();
 
@@ -2893,7 +2914,9 @@ function printTicket(venta){
 
   al(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),9,false,false);
   al(venta.folio,10,true,false);
-  al('Cliente: '+venta.cliente,9,false,false);
+  al('ID: '+(venta.cliente_id||''),9,false,false);
+  al('Nombre: '+soloNombreCliente(venta.cliente,venta.cliente_id),9,false,false);
+  al('Telefono: '+telefonoCliente(venta),9,false,false);
   y+=1;as2();
 
   prods.forEach(function(p){
@@ -4394,6 +4417,7 @@ async function loadClientesDropdown(resetPosDefault) {
     var html = '';
     clientes.forEach(function(c) {
       html += '<option value="' + c.id + ' - ' + c.nombre.replace(/"/g,'&quot;') + '">' + c.id + ' - ' + c.nombre + '</option>';
+      clientesTelCache[c.id] = c.telefono || '';
     });
     var select = document.getElementById('pos-cliente');
     if (select) {
@@ -5783,7 +5807,9 @@ function imprimirRemisionOrden(orden){
     y+=0.5;
     al((orden.fecha_recibido||'')+(orden.fecha_entrega_estimada?'  ·  Entrega est.: '+orden.fecha_entrega_estimada:''),7,false,false);
     al(orden.folio,9,true,false);
-    al('Cliente: '+(orden.cliente||''),8,false,false);
+    al('ID: '+(orden.cliente_id||''),8,false,false);
+    al('Nombre: '+soloNombreCliente(orden.cliente,orden.cliente_id),8,false,false);
+    al('Telefono: '+telefonoCliente(orden),8,false,false);
     y+=1;as();
 
     (orden.prendas||[]).forEach(function(p){
