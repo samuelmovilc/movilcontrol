@@ -2688,18 +2688,20 @@ function printTicket(venta){
   }
 
   // Header negocio: nombre + dirección + teléfono, alineados igual que los datos de la factura
-  if(showNombre)addLine(nombre,10,true,false);
-  if(dir&&showDir)addLine('Direccion: '+dir,7,false,false,false,true);
-  if(tel&&showTel)addLine('Telefono: '+tel,7,false,false,false,true);
+  // (todo en negro sólido y con letra un poco más grande: en térmica, el gris sale
+  // opaco/apenas visible, y letra más chica hace el ticket se vea más corto/apretado)
+  if(showNombre)addLine(nombre,12,true,false);
+  if(dir&&showDir)addLine('Direccion: '+dir,9,false,false);
+  if(tel&&showTel)addLine('Telefono: '+tel,9,false,false);
   y+=1.5;
   addSep();
 
   // Datos de la venta (fecha/folio/cliente) — bloque aparte, alineado a la izquierda
   // (venta.fecha puede venir como fecha pura o, al recargar desde la BD, como
   // timestamp ISO completo — fmtFechaCaja() lo deja siempre en dd/mm/aaaa)
-  addLine(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),7,false,false,false,true);
-  addLine(venta.folio,8,true,false);
-  addLine('Cliente: '+venta.cliente,7,false,false,false,true);
+  addLine(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),9,false,false);
+  addLine(venta.folio,10,true,false);
+  addLine('Cliente: '+venta.cliente,9,false,false);
   y+=1;
   addSep();
 
@@ -2710,15 +2712,15 @@ function printTicket(venta){
     var pu=parseFloat(p.precioUnitario||p.precio_unitario||0);
     var sub=parseFloat(p.subtotal||0);
     // Nombre puede ser largo — wrap manual
-    doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(0);
+    doc.setFontSize(10);doc.setFont('helvetica','bold');doc.setTextColor(0);
     var lines=doc.splitTextToSize(np,cw);
-    lines.forEach(function(l){addLine(l,8,false,false)});
-    addRow(fmtCant(cant)+' x '+fmt(pu),fmt(sub),8,false,true);
+    lines.forEach(function(l){addLine(l,10,false,false)});
+    addRow(fmtCant(cant)+' x '+fmt(pu),fmt(sub),10,false);
     y+=0.5;
   });
 
   addSepStrong();
-  addRow('TOTAL',fmt(venta.total),11,true);
+  addRow('TOTAL',fmt(venta.total),13,true);
   addSepStrong();
 
   // Si esta venta viene de una orden de sastrería, desglosa el abono que ya se cobró al
@@ -2726,27 +2728,27 @@ function printTicket(venta){
   // TOTAL — es solo para que la factura muestre el historial completo del pago).
   if(venta.abono_orden_servicio&&venta.abono_orden_servicio.length){
     venta.abono_orden_servicio.forEach(function(a){
-      addLine('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,true,false);
+      addLine('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),9,true,false);
     });
-    addLine('Pagado al entregar ('+fmtFechaCaja(venta.fecha)+'):',7,true,false);
+    addLine('Pagado al entregar ('+fmtFechaCaja(venta.fecha)+'):',9,true,false);
   }
   // Métodos de pago
   if(mp&&mp.length>0){
-    mp.forEach(function(r){addLine((r.metodo||'')+': '+fmt(r.monto||0),8,false,false)});
+    mp.forEach(function(r){addLine((r.metodo||'')+': '+fmt(r.monto||0),10,false,false)});
   }else{
-    addLine('Pago: '+(venta.metodoPago||''),8,false,false);
+    addLine('Pago: '+(venta.metodoPago||''),10,false,false);
   }
-  if(venta.cambio>0)addLine('Cambio: '+fmt(venta.cambio),8,false,false);
+  if(venta.cambio>0)addLine('Cambio: '+fmt(venta.cambio),10,false,false);
   // Para ventas que vienen de una orden de sastrería, las observaciones no se
   // imprimen en la factura (quedan en la remisión de recepción).
-  if(!venta.orden_servicio_id && venta.observaciones&&venta.observaciones.trim())addLine('Obs: '+venta.observaciones,7,false,false,false,true);
+  if(!venta.orden_servicio_id && venta.observaciones&&venta.observaciones.trim())addLine('Obs: '+venta.observaciones,9,false,false);
 
   y+=1;addSep();
-  // Wrapping del mensaje (pie de página, gris y centrado para no competir con el TOTAL)
-  doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(GRAY);
+  // Mensaje de pie de página, centrado, en negro sólido igual que el resto
+  doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(0);
   var msgLines=doc.splitTextToSize(msg,cw);
   msgLines.forEach(function(l){
-    doc.text(l,(pw-doc.getTextWidth(l))/2,y);y+=lineH*(7/8);
+    doc.text(l,(pw-doc.getTextWidth(l))/2,y);y+=lineH*(9/8);
   });
   doc.setTextColor(0);
   // Mensaje solo desde configuración
@@ -2799,41 +2801,41 @@ function printTicket(venta){
   }
 
   if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+2;}catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}}
-  if(showNombre)al(nombre,10,true,false);
-  if(dir&&showDir)al('Direccion: '+dir,7,false,false,true);
-  if(tel&&showTel)al('Telefono: '+tel,7,false,false,true);
+  if(showNombre)al(nombre,12,true,false);
+  if(dir&&showDir)al('Direccion: '+dir,9,false,false);
+  if(tel&&showTel)al('Telefono: '+tel,9,false,false);
   y+=1.5;as2();
 
-  al(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),7,false,false,true);
-  al(venta.folio,8,true,false);
-  al('Cliente: '+venta.cliente,7,false,false,true);
+  al(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),9,false,false);
+  al(venta.folio,10,true,false);
+  al('Cliente: '+venta.cliente,9,false,false);
   y+=1;as2();
 
   prods.forEach(function(p){
     var np=p.nombre||'';var cant=parseFloat(p.cantidad||0);
     var pu=parseFloat(p.precioUnitario||p.precio_unitario||0);
     var sub=parseFloat(p.subtotal||0);
-    doc2.setFontSize(8);doc2.setFont('helvetica','bold');doc2.setTextColor(0);
+    doc2.setFontSize(10);doc2.setFont('helvetica','bold');doc2.setTextColor(0);
     var lines=doc2.splitTextToSize(np,cw);
-    lines.forEach(function(l){al(l,8,false,false)});
-    ar(fmtCant(cant)+' x '+fmt(pu),fmt(sub),8,false,true);y+=0.5;
+    lines.forEach(function(l){al(l,10,false,false)});
+    ar(fmtCant(cant)+' x '+fmt(pu),fmt(sub),10,false);y+=0.5;
   });
 
-  as2Strong();ar('TOTAL',fmt(venta.total),11,true);as2Strong();
+  as2Strong();ar('TOTAL',fmt(venta.total),13,true);as2Strong();
   if(venta.abono_orden_servicio&&venta.abono_orden_servicio.length){
     venta.abono_orden_servicio.forEach(function(a){
-      al('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),7,true,false);
+      al('Abono ('+fmtFechaCaja(a.created_at)+'): '+fmt(a.monto||0)+' - '+(a.metodo_pago||''),9,true,false);
     });
-    al('Pagado al entregar ('+fmtFechaCaja(venta.fecha)+'):',7,true,false);
+    al('Pagado al entregar ('+fmtFechaCaja(venta.fecha)+'):',9,true,false);
   }
-  if(mp&&mp.length>0){mp.forEach(function(r){al((r.metodo||'')+': '+fmt(r.monto||0),8,false,false)})}
-  else{al('Pago: '+(venta.metodoPago||''),8,false,false)}
-  if(venta.cambio>0)al('Cambio: '+fmt(venta.cambio),8,false,false);
-  if(!venta.orden_servicio_id && venta.observaciones&&venta.observaciones.trim())al('Obs: '+venta.observaciones,7,false,false,true);
+  if(mp&&mp.length>0){mp.forEach(function(r){al((r.metodo||'')+': '+fmt(r.monto||0),10,false,false)})}
+  else{al('Pago: '+(venta.metodoPago||''),10,false,false)}
+  if(venta.cambio>0)al('Cambio: '+fmt(venta.cambio),10,false,false);
+  if(!venta.orden_servicio_id && venta.observaciones&&venta.observaciones.trim())al('Obs: '+venta.observaciones,9,false,false);
   y+=1;as2();
-  doc2.setFontSize(7);doc2.setFont('helvetica','bold');doc2.setTextColor(GRAY);
+  doc2.setFontSize(9);doc2.setFont('helvetica','bold');doc2.setTextColor(0);
   var ml=doc2.splitTextToSize(msg,cw);
-  ml.forEach(function(l){doc2.text(l,(pw-doc2.getTextWidth(l))/2,y);y+=lineH*(7/8)});
+  ml.forEach(function(l){doc2.text(l,(pw-doc2.getTextWidth(l))/2,y);y+=lineH*(9/8)});
   doc2.setTextColor(0);
   // Mensaje solo desde configuración
 
