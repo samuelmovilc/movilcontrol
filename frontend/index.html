@@ -2787,7 +2787,7 @@ function printTicket(venta){
       var imgW=40;var imgH=15;
       var imgX=(pw-imgW)/2;
       doc.addImage(cfg.logo,imgFormat(cfg.logo),imgX,y,imgW,imgH,undefined,'FAST');
-      y+=imgH+2;
+      y+=imgH+5;
     }catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}
   }
 
@@ -2906,7 +2906,7 @@ function printTicket(venta){
     doc2.line(margin,y,pw-margin,y);y+=3;
   }
 
-  if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+2;}catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}}
+  if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+5;}catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}}
   if(showNombre)al(nombre,12,true,false);
   if(dir&&showDir)al('Direccion: '+dir,9,false,false);
   if(tel&&showTel)al('Telefono: '+tel,9,false,false);
