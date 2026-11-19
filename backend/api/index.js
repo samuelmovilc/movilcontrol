@@ -1576,6 +1576,16 @@ app.get('/api/ordenes', tenantAuth, requireModulo('ordenes'), async (req, res) =
         o.abonado = abonoMap[o.id] || 0;
         o.saldo = parseFloat(o.total) - o.abonado;
       });
+      // Solo para poder mostrar un botón de "Factura" en órdenes terminadas: el folio
+      // de la venta que ya se creó al liquidar (no se toca nada de cómo se liquida ni
+      // de comisiones, es una lectura aparte, nada más para mostrarlo en la lista).
+      const ventaIds = ordenes.map(o => o.venta_id).filter(Boolean);
+      if (ventaIds.length) {
+        const [ventasFolio] = await req.tenantPool.query('SELECT id, folio FROM ventas WHERE id IN (?)', [ventaIds]);
+        const folioMap = {};
+        ventasFolio.forEach(v => { folioMap[v.id] = v.folio; });
+        ordenes.forEach(o => { o.venta_folio = o.venta_id ? (folioMap[o.venta_id] || null) : null; });
+      }
     }
     res.json(ordenes);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1585,6 +1595,13 @@ app.get('/api/ordenes/:id', tenantAuth, requireModulo('ordenes'), async (req, re
   try {
     const orden = await cargarOrdenCompleta(req.tenantPool, req.params.id);
     if (!orden) return res.status(404).json({ error: 'No encontrada' });
+    // Mismo agregado de solo-lectura que en la lista: el folio de la venta generada al
+    // liquidar, para el botón "Factura" del detalle. No pasa por cargarOrdenCompleta()
+    // (esa función la usa también liquidar/anular/actualizar) para no tocarla.
+    if (orden.venta_id) {
+      const [[v]] = await req.tenantPool.query('SELECT folio FROM ventas WHERE id=?', [orden.venta_id]);
+      orden.venta_folio = v ? v.folio : null;
+    }
     res.json(orden);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
