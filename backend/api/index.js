@@ -1846,7 +1846,15 @@ app.get('/api/caja/sesion-actual', tenantAuth, requireModulo('pos','caja'), asyn
         "SELECT * FROM movimientos_caja WHERE caja_sesion_id=? AND tipo='egreso' AND categoria NOT IN ('Pago Técnico','Comisión POS') ORDER BY id DESC",
         [sesion.id]
       );
-      detalle = { ventas, movimientos };
+      // Ingresos que entran por movimientos_caja y no por una venta del POS — abono al
+      // recibir una orden, pago al entregarla, abono a un crédito, etc. Ya cuentan en
+      // los totales de arriba (calcularTotalesCaja los suma); esto es solo para poder
+      // listarlos uno por uno, igual que ya se listan los gastos.
+      const [ingresosOtros] = await req.tenantPool.query(
+        "SELECT * FROM movimientos_caja WHERE caja_sesion_id=? AND tipo='ingreso' ORDER BY id DESC",
+        [sesion.id]
+      );
+      detalle = { ventas, movimientos, ingresos_otros: ingresosOtros };
     }
     res.json(Object.assign({ abierta: true }, sesion, totales, detalle));
   } catch(e) { res.status(500).json({ error: e.message }); }

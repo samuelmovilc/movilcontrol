@@ -805,6 +805,12 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
             <table style="font-size:12px"><thead><tr><th>Hora</th><th>Folio</th><th>Monto</th><th>Acciones</th></tr></thead><tbody id="turno-ventas-body"></tbody></table>
           </div>
         </div>
+        <div class="turno-tabla-box" style="grid-column:1/-1">
+          <div class="tt-header">Otros Ingresos — abonos y pagos (<span id="dash-ingresos-otros-count">0</span>)</div>
+          <div class="tbl-wrap" style="max-height:260px">
+            <table style="font-size:12px"><thead><tr><th>Categoría / Obs</th><th>Método</th><th>Monto</th></tr></thead><tbody id="turno-ingresos-otros-body"></tbody></table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -3009,6 +3015,17 @@ function renderCajaDashboard(){
       + '</td>'
       + '</tr>';
   }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:14px">No hay ventas en este turno</td></tr>';
+
+  var ingresosOtros = s.ingresos_otros || [];
+  document.getElementById('dash-ingresos-otros-count').textContent = ingresosOtros.length;
+  var ingresosOtrosBody = document.getElementById('turno-ingresos-otros-body');
+  ingresosOtrosBody.innerHTML = ingresosOtros.length ? ingresosOtros.map(function(r){
+    return '<tr>'
+      + '<td><strong>'+r.categoria+'</strong>'+(r.observaciones?'<br><span style="color:var(--text-light);font-size:11px">'+r.observaciones+'</span>':'')+'</td>'
+      + '<td>'+(r.metodo_pago||'—')+'</td>'
+      + '<td style="color:var(--green);font-weight:700">'+fmt(r.monto)+'</td>'
+      + '</tr>';
+  }).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text-light);padding:14px">No hay otros ingresos en este turno</td></tr>';
 }
 
 async function loadCajaHistorial(){
