@@ -5794,16 +5794,16 @@ function imprimirRemisionOrden(orden){
     }
 
     if(!measuring && cfg.logo){
-      try{var iW=40,iH=15,iX=(pw-iW)/2;doc.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+2;}catch(e){console.warn('No se pudo agregar el logo:',e);}
+      try{var iW=40,iH=15,iX=(pw-iW)/2;doc.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+5;}catch(e){console.warn('No se pudo agregar el logo:',e);}
     } else if(measuring && cfg.logo){
-      y+=17;
+      y+=20;
     }
-    if(showNombre)al(nombre,10,true,true);
-    if(dir&&showDir)al('Direccion: '+dir,7,false,true);
-    if(tel&&showTel)al('Telefono: '+tel,7,false,true);
+    if(showNombre)al(nombre,10,true,false);
+    if(dir&&showDir)al('Direccion: '+dir,7,false,false);
+    if(tel&&showTel)al('Telefono: '+tel,7,false,false);
     y+=1.5;as();
 
-    al('REMISIÓN - RECEPCIÓN DE PRENDA(S)',9,true,true);
+    al('REMISIÓN - RECEPCIÓN DE PRENDA(S)',9,true,false);
     y+=0.5;
     al((orden.fecha_recibido||'')+(orden.fecha_entrega_estimada?'  ·  Entrega est.: '+orden.fecha_entrega_estimada:''),7,false,false);
     al(orden.folio,9,true,false);
