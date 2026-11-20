@@ -2794,9 +2794,9 @@ function printTicket(venta){
   // Header negocio: nombre + dirección + teléfono, alineados igual que los datos de la factura
   // (todo en negro sólido y con letra un poco más grande: en térmica, el gris sale
   // opaco/apenas visible, y letra más chica hace el ticket se vea más corto/apretado)
-  if(showNombre)addLine(nombre,12,true,false);
-  if(dir&&showDir)addLine('Direccion: '+dir,9,false,false);
-  if(tel&&showTel)addLine('Telefono: '+tel,9,false,false);
+  if(showNombre)addLine(String(nombre).toUpperCase(),14,true,false);
+  if(dir&&showDir)addLine('DIRECCION: '+String(dir).toUpperCase(),11,false,false);
+  if(tel&&showTel)addLine('TELEFONO: '+String(tel).toUpperCase(),11,false,false);
   y+=1.5;
   addSep();
 
@@ -2907,9 +2907,9 @@ function printTicket(venta){
   }
 
   if(cfg.logo){try{var iW=40,iH=15,iX=(pw-iW)/2;doc2.addImage(cfg.logo,imgFormat(cfg.logo),iX,y,iW,iH,undefined,'FAST');y+=iH+5;}catch(e){console.warn('No se pudo agregar el logo al ticket:',e);}}
-  if(showNombre)al(nombre,12,true,false);
-  if(dir&&showDir)al('Direccion: '+dir,9,false,false);
-  if(tel&&showTel)al('Telefono: '+tel,9,false,false);
+  if(showNombre)al(String(nombre).toUpperCase(),14,true,false);
+  if(dir&&showDir)al('DIRECCION: '+String(dir).toUpperCase(),11,false,false);
+  if(tel&&showTel)al('TELEFONO: '+String(tel).toUpperCase(),11,false,false);
   y+=1.5;as2();
 
   al(fmtFechaCaja(venta.fecha)+' '+(venta.hora||''),9,false,false);
@@ -5730,6 +5730,7 @@ function imprimirRemisionOrden(orden){
   var nombre=cfg.nombre_negocio||cfg.nombreNegocio||'ControlMovil';
   var dir=cfg.direccion||'';
   var tel=cfg.telefono||'';
+  var msg=cfg.mensaje_tirilla||cfg.mensajeTirilla||'¡Gracias por su compra!';
   var showNombre=tirillaFlag(cfg.mostrar_nombre_tirilla);
   var showDir=tirillaFlag(cfg.mostrar_direccion_tirilla);
   var showTel=tirillaFlag(cfg.mostrar_telefono_tirilla);
@@ -5798,14 +5799,15 @@ function imprimirRemisionOrden(orden){
     } else if(measuring && cfg.logo){
       y+=20;
     }
-    if(showNombre)al(nombre,10,true,false);
-    if(dir&&showDir)al('Direccion: '+dir,7,false,false);
-    if(tel&&showTel)al('Telefono: '+tel,7,false,false);
+    if(showNombre)al(String(nombre).toUpperCase(),12,true,false);
+    if(dir&&showDir)al('DIRECCION: '+String(dir).toUpperCase(),9,false,false);
+    if(tel&&showTel)al('TELEFONO: '+String(tel).toUpperCase(),9,false,false);
     y+=1.5;as();
 
     al('REMISIÓN - RECEPCIÓN DE PRENDA(S)',9,true,false);
     y+=0.5;
-    al((orden.fecha_recibido||'')+(orden.fecha_entrega_estimada?'  ·  Entrega est.: '+orden.fecha_entrega_estimada:''),7,false,false);
+    al('Fecha de recepcion: '+fmtFechaCaja(orden.fecha_recibido),7,false,false);
+    if(orden.fecha_entrega_estimada) al('Fecha de entrega: '+fmtFechaCaja(orden.fecha_entrega_estimada),7,false,false);
     al(orden.folio,9,true,false);
     al('ID: '+(orden.cliente_id||''),8,false,false);
     al('Nombre: '+soloNombreCliente(orden.cliente,orden.cliente_id),8,false,false);
@@ -5835,9 +5837,9 @@ function imprimirRemisionOrden(orden){
     if(orden.observaciones&&orden.observaciones.trim()) al('Obs: '+orden.observaciones,7,false,false);
 
     y+=1;as();
-    doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(0);
-    var ml=doc.splitTextToSize('Conserve este comprobante para reclamar su(s) prenda(s).',cw);
-    ml.forEach(function(l){doc.text(l,(pw-doc.getTextWidth(l))/2,y);y+=lineH*(7/8)});
+    doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(0);
+    var ml=doc.splitTextToSize(msg,cw);
+    ml.forEach(function(l){doc.text(l,(pw-doc.getTextWidth(l))/2,y);y+=lineH*(9/8)});
     doc.setTextColor(0);
 
     return y;
