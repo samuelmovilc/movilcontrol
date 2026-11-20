@@ -1771,7 +1771,7 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
 <!-- ═══ NUEVA ORDEN DE SERVICIO ═══ -->
 <div class="modal-overlay" id="modal-orden-nueva">
   <div class="modal" style="max-width:860px">
-    <div class="modal-header"><span><i class="fa-solid fa-shirt"></i> Nueva Orden de Servicio</span><button class="modal-close" onclick="closeModal('modal-orden-nueva')"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-header"><span><i class="fa-solid fa-shirt"></i> <span id="orden-modal-titulo-txt">Nueva Orden de Servicio</span></span><button class="modal-close" onclick="closeModal('modal-orden-nueva')"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:10px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
         <div class="form-group"><label>Cliente</label>
@@ -1792,15 +1792,18 @@ tr.anulada-row td{opacity:.55}tr.anulada-row{background:#fff5f5!important}
       <div id="orden-prendas-list" style="display:flex;flex-direction:column;gap:8px"></div>
       <div style="text-align:right;font-weight:700;font-size:15px">Total: <span id="orden-total-preview">$0.00</span></div>
 
-      <div style="border-top:1px solid var(--border);padding-top:10px">
+      <div id="orden-abono-section" style="border-top:1px solid var(--border);padding-top:10px">
         <div style="font-size:13px;font-weight:600;color:var(--text-light);margin-bottom:6px">Abono al recibir la(s) prenda(s) <span style="font-weight:400">(déjalo en $0 si no deja nada)</span></div>
         <div id="orden-abono-box" style="margin-top:8px">
           <div class="multi-pay-list" id="orden-abono-pay-list" style="max-height:none"></div>
           <button type="button" class="btn btn-secondary btn-xs" onclick="addPayRowGeneric('orden-abono-pay-list')" style="margin-top:4px"><i class="fa-solid fa-plus"></i> Método de pago</button>
         </div>
       </div>
+      <div id="orden-edit-nota" style="display:none;font-size:11.5px;color:var(--text-light);background:var(--surface2);padding:8px 10px;border-radius:var(--radius-sm)">
+        Estás editando una orden ya creada: el cliente y la fecha de recepción no se pueden cambiar aquí. Puedes ajustar la entrega estimada, las observaciones y las prendas (precio, técnico, comisión, etc.) — si cambias las prendas, el total se recalcula.
+      </div>
 
-      <button class="btn btn-primary" onclick="guardarNuevaOrden()" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Crear Orden</button>
+      <button class="btn btn-primary" onclick="guardarNuevaOrden()" id="orden-modal-btn-guardar" style="width:100%;justify-content:center"><i class="fa-solid fa-floppy-disk"></i> Crear Orden</button>
     </div>
   </div>
 </div>
@@ -5607,6 +5610,9 @@ function renderOrdenesTable(){
     var btnRemision = (o.estado==='cotizacion')
       ? ' <button class="btn btn-secondary btn-xs" onclick="imprimirRemisionOrden(ordenesCache.find(function(x){return x.id==='+o.id+'}))" title="Imprimir remisión de recepción"><i class="fa-solid fa-print"></i> Remisión</button>'
       : '';
+    var btnEditar = (o.estado==='cotizacion')
+      ? ' <button class="btn btn-secondary btn-xs" onclick="abrirEditarOrden('+o.id+')" title="Editar orden"><i class="fa-solid fa-pen"></i> Editar</button>'
+      : '';
     return '<tr>'
       + '<td style="font-weight:700;color:var(--electric)">'+o.folio+'</td>'
       + '<td>'+(o.cliente||'')+'</td>'
@@ -5616,13 +5622,26 @@ function renderOrdenesTable(){
       + '<td>'+fmt(o.abonado)+'</td>'
       + '<td>'+fmt(o.saldo)+'</td>'
       + '<td>'+estadoOrdenLabel(o.estado)+'</td>'
-      + '<td><button class="btn btn-secondary btn-xs" onclick="verOrdenDetalle('+o.id+')"><i class="fa-solid fa-eye"></i></button>'+btnRemision+btnFactura+'</td>'
+      + '<td><button class="btn btn-secondary btn-xs" onclick="verOrdenDetalle('+o.id+')"><i class="fa-solid fa-eye"></i></button>'+btnEditar+btnRemision+btnFactura+'</td>'
       + '</tr>';
   }).join('');
 }
 
-/* ── NUEVA ORDEN ── */
+/* ── NUEVA ORDEN / EDITAR ORDEN ──
+   Las dos comparten el mismo modal (modal-orden-nueva): editandoOrdenId queda en null
+   mientras se crea una orden, y con el id de la orden mientras se edita una que ya
+   existe. guardarNuevaOrden() se fija en esa variable para decidir POST (crear) o
+   PUT (editar) al guardar — ver más abajo. */
+var editandoOrdenId = null;
+
 function abrirNuevaOrden(){
+  editandoOrdenId = null;
+  document.getElementById('orden-modal-titulo-txt').textContent = 'Nueva Orden de Servicio';
+  document.getElementById('orden-modal-btn-guardar').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Crear Orden';
+  document.getElementById('orden-cliente').disabled = false;
+  document.getElementById('orden-fecha-recibido').disabled = false;
+  document.getElementById('orden-abono-section').style.display = '';
+  document.getElementById('orden-edit-nota').style.display = 'none';
   document.getElementById('orden-cliente').value = '';
   document.getElementById('orden-fecha-recibido').value = todayStr();
   document.getElementById('orden-fecha-entrega').value = '';
@@ -5634,7 +5653,43 @@ function abrirNuevaOrden(){
   openModal('modal-orden-nueva');
 }
 
-function agregarPrendaRow(){
+// El cliente puede volver después (a dejar otra prenda, a que le cambien la fecha de
+// entrega, o porque faltó algo) y el dueño necesita poder ajustar la orden sin tener
+// que anularla y crear una nueva. Solo aplica mientras la orden sigue en Cotización
+// (el backend en PUT /api/ordenes/:id lo exige también) — una ya entregada no se edita,
+// porque ya se generó su factura final.
+async function abrirEditarOrden(id){
+  var orden;
+  try { orden = await apiGet('/ordenes/'+id); } catch(e) { toast('Error cargando la orden: '+e.message,'error'); return; }
+  if(orden.estado !== 'cotizacion'){ toast('Solo se puede editar una orden en estado Cotización','error'); return; }
+
+  editandoOrdenId = id;
+  document.getElementById('orden-modal-titulo-txt').textContent = 'Editar Orden '+orden.folio;
+  document.getElementById('orden-modal-btn-guardar').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar Cambios';
+  document.getElementById('orden-abono-section').style.display = 'none';
+  document.getElementById('orden-edit-nota').style.display = '';
+
+  var selCliente = document.getElementById('orden-cliente');
+  if(!Array.from(selCliente.options).some(function(o){ return o.value===orden.cliente; })){
+    selCliente.insertAdjacentHTML('beforeend', '<option value="'+orden.cliente+'">'+orden.cliente+'</option>');
+  }
+  selCliente.value = orden.cliente;
+  selCliente.disabled = true;
+  document.getElementById('orden-fecha-recibido').value = String(orden.fecha_recibido||'').slice(0,10);
+  document.getElementById('orden-fecha-recibido').disabled = true;
+  document.getElementById('orden-fecha-entrega').value = orden.fecha_entrega_estimada ? String(orden.fecha_entrega_estimada).slice(0,10) : '';
+  document.getElementById('orden-observaciones').value = orden.observaciones || '';
+
+  document.getElementById('orden-prendas-list').innerHTML = '';
+  (orden.prendas && orden.prendas.length ? orden.prendas : [{}]).forEach(function(p){ agregarPrendaRow(p); });
+  actualizarTotalOrdenPreview();
+
+  openModal('modal-orden-nueva');
+}
+
+// prendaData es opcional: si viene (al editar una orden ya creada), la fila sale
+// prellenada con esos valores en vez de vacía.
+function agregarPrendaRow(prendaData){
   var list = document.getElementById('orden-prendas-list');
   var row = document.createElement('div');
   row.className = 'prenda-row';
@@ -5648,6 +5703,15 @@ function agregarPrendaRow(){
     + '<div class="form-group" style="grid-column:1/-1"><label>Descripción / daño a reparar</label><input type="text" class="pr-descripcion" placeholder="Qué se va a hacer"></div>'
     + '<div class="form-group" style="grid-column:1/-1"><label>Observaciones</label><input type="text" class="pr-obs" placeholder="Opcional"></div>';
   list.appendChild(row);
+  if(prendaData){
+    row.querySelector('.pr-tipo').value = prendaData.tipo_prenda || '';
+    row.querySelector('.pr-trabajo').value = prendaData.tipo_trabajo || 'reparacion';
+    row.querySelector('.pr-precio').value = prendaData.precio != null ? prendaData.precio : '';
+    row.querySelector('.pr-tecnico').value = prendaData.tecnico_id || '';
+    row.querySelector('.pr-comision').value = prendaData.comision_porcentaje != null ? prendaData.comision_porcentaje : 0;
+    row.querySelector('.pr-descripcion').value = prendaData.descripcion || '';
+    row.querySelector('.pr-obs').value = prendaData.observaciones || '';
+  }
 }
 
 function autoComisionPrenda(sel){
@@ -5683,13 +5747,39 @@ function leerPrendasDelFormulario(){
 }
 
 async function guardarNuevaOrden(){
+  var prendas = leerPrendasDelFormulario();
+  if(!prendas.length){ toast('Agrega al menos una prenda con tipo y precio','error'); return; }
+
+  if(editandoOrdenId){
+    // Editar: el backend (PUT /api/ordenes/:id) solo acepta entrega estimada,
+    // observaciones y prendas — cliente y fecha de recepción quedan fijos (por
+    // eso esos dos campos están deshabilitados en el modal) y no requiere caja
+    // abierta, porque no mueve plata.
+    var payloadEdit = {
+      fecha_entrega_estimada: document.getElementById('orden-fecha-entrega').value || null,
+      observaciones: document.getElementById('orden-observaciones').value.trim(),
+      prendas: prendas
+    };
+    try {
+      showLoading('Guardando cambios...');
+      await apiPut('/ordenes/'+editandoOrdenId, payloadEdit);
+      hideLoading();
+      toast('Orden actualizada','success');
+      closeModal('modal-orden-nueva');
+      editandoOrdenId = null;
+      loadOrdenes();
+    } catch(e) {
+      hideLoading();
+      toast('Error: '+e.message,'error');
+    }
+    return;
+  }
+
   var clienteStr = document.getElementById('orden-cliente').value;
   if(!clienteStr){ toast('Selecciona un cliente','error'); return; }
   var clienteId = clienteStr.split(' - ')[0].trim();
   var fechaRecibido = document.getElementById('orden-fecha-recibido').value;
   if(!fechaRecibido){ toast('Indica la fecha de recepción','error'); return; }
-  var prendas = leerPrendasDelFormulario();
-  if(!prendas.length){ toast('Agrega al menos una prenda con tipo y precio','error'); return; }
   if(!(await cajaEstaAbierta())){ toast('No hay una caja abierta. Abre la caja antes de crear una orden.','error'); return; }
 
   var metodosAbono = getPaymentRowsFrom('orden-abono-pay-list');
