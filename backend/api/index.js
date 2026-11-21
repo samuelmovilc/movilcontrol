@@ -1147,8 +1147,10 @@ app.delete('/api/tecnicos/:id', tenantAuth, requireModulo('ordenes','peluqueria'
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Resumen de comisiones por técnico: lo ganado en prendas ya entregadas, lo pagado y el
-// saldo (positivo = se le debe, negativo = saldo a favor del taller).
+// Resumen de comisiones por técnico: lo ganado por las prendas que se le asignaron
+// (sin importar si la orden ya se entregó o no — este taller liquida a diario, no
+// espera a que el cliente recoja la prenda), lo pagado y el saldo (positivo = se le
+// debe, negativo = saldo a favor del taller). Solo se excluyen las órdenes anuladas.
 app.get('/api/tecnicos/resumen', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
@@ -1161,9 +1163,11 @@ app.get('/api/tecnicos/resumen', tenantAuth, requireModulo('ordenes'), async (re
       SELECT op.tecnico_id, COUNT(*) as cantidad, SUM(op.precio) as vendido, SUM(op.comision_monto) as ganado
       FROM orden_prendas op
       JOIN ordenes_servicio o ON o.id = op.orden_id
-      WHERE op.tecnico_id IS NOT NULL AND op.estado='entregada' AND o.estado='terminada'`;
+      WHERE op.tecnico_id IS NOT NULL AND o.estado!='anulada'`;
     const gParams = [];
-    if (fecha_inicio && fecha_fin) { ganadoSql += ' AND DATE(o.fecha_entregado) BETWEEN ? AND ?'; gParams.push(fecha_inicio, fecha_fin); }
+    // Usa la fecha de entrega si ya la tiene y, si no, la de creación — para que una
+    // prenda todavía sin entregar también caiga dentro del rango de fechas filtrado.
+    if (fecha_inicio && fecha_fin) { ganadoSql += ' AND DATE(COALESCE(o.fecha_entregado, o.created_at)) BETWEEN ? AND ?'; gParams.push(fecha_inicio, fecha_fin); }
     ganadoSql += ' GROUP BY op.tecnico_id';
     const [ganado] = await req.tenantPool.query(ganadoSql, gParams);
     const ganadoMap = {};
@@ -1240,6 +1244,9 @@ async function ensureComisionTecnicoPagosPrendas(pool) {
 // liquidada, a qué pago quedó ligada. Igual que en Peluquería, esto YA NO se estima
 // por fecha (FIFO): sale de comision_tecnico_pagos_prendas, que guarda exactamente
 // qué prendas eligió el dueño al registrar cada pago (ver POST /pagos-ordenes abajo).
+// No exige que la prenda esté "entregada" ni la orden "terminada": el taller liquida
+// a diario a sus técnicos por el trabajo hecho, sin esperar a que el cliente recoja
+// la prenda — solo se excluyen las órdenes anuladas.
 app.get('/api/tecnicos/:id/liquidacion-detalle', tenantAuth, requireModulo('ordenes'), async (req, res) => {
   try {
     await ensureComisionTecnicoPagosPrendas(req.tenantPool);
@@ -1249,14 +1256,14 @@ app.get('/api/tecnicos/:id/liquidacion-detalle', tenantAuth, requireModulo('orde
 
     const [ordenesRaw] = await req.tenantPool.query(`
       SELECT op.id as prenda_id, o.id as orden_id, o.folio, o.cliente,
-             DATE_FORMAT(o.fecha_entregado,'%Y-%m-%d') as fecha, o.fecha_entregado,
+             DATE_FORMAT(COALESCE(o.fecha_entregado, o.created_at),'%Y-%m-%d') as fecha, o.fecha_entregado,
              op.precio as total, op.comision_monto, ctp.pago_id as pago_id,
              vt.folio as venta_folio
       FROM orden_prendas op
       JOIN ordenes_servicio o ON o.id = op.orden_id
       LEFT JOIN comision_tecnico_pagos_prendas ctp ON ctp.prenda_id = op.id
       LEFT JOIN ventas vt ON vt.id = o.venta_id
-      WHERE op.tecnico_id=? AND op.estado='entregada' AND o.estado='terminada'
+      WHERE op.tecnico_id=? AND o.estado!='anulada'
       ORDER BY COALESCE(o.fecha_entregado, o.created_at) ASC, o.id ASC, op.id ASC
     `, [tecnicoId]);
 
@@ -1326,19 +1333,24 @@ app.post('/api/tecnicos/:id/pagos-ordenes', tenantAuth, requireModulo('ordenes')
 
     await conn.beginTransaction();
 
+    // Ya no se exige que la prenda esté "entregada": el taller liquida a diario por el
+    // trabajo asignado, sin esperar a que el cliente recoja la prenda. Solo se bloquea
+    // si la prenda es de otro técnico o su orden quedó anulada.
     const [prendas] = await conn.query(
-      `SELECT op.id, op.tecnico_id, op.estado, op.comision_monto
-       FROM orden_prendas op WHERE op.id IN (?) FOR UPDATE`,
+      `SELECT op.id, op.tecnico_id, op.comision_monto, o.estado as orden_estado
+       FROM orden_prendas op
+       JOIN ordenes_servicio o ON o.id = op.orden_id
+       WHERE op.id IN (?) FOR UPDATE`,
       [prenda_ids]
     );
     if (prendas.length !== prenda_ids.length) {
       await conn.rollback(); conn.release();
       return res.status(404).json({ error: 'Una o más órdenes seleccionadas no existen' });
     }
-    const invalida = prendas.find(p => String(p.tecnico_id) !== String(tecnicoId) || p.estado !== 'entregada');
+    const invalida = prendas.find(p => String(p.tecnico_id) !== String(tecnicoId) || p.orden_estado === 'anulada');
     if (invalida) {
       await conn.rollback(); conn.release();
-      return res.status(409).json({ error: 'Una o más órdenes seleccionadas no pertenecen a este técnico o no están vigentes' });
+      return res.status(409).json({ error: 'Una o más órdenes seleccionadas no pertenecen a este técnico o su orden fue anulada' });
     }
 
     const [yaLiquidadas] = await conn.query(
